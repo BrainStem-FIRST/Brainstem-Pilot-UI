@@ -58,15 +58,15 @@
       "height": 144,
       "halfExtentX": 72,
       "halfExtentY": 72,
-      "imageWidth": 1024,
-      "imageHeight": 1024,
+      "imageWidth": 4096,
+      "imageHeight": 4096,
       "originMode": "center",
-      "centerPixel": { "x": 512, "y": 512 },
+      "centerPixel": { "x": 2048, "y": 2048 },
       "extentPixels": {
-        "xMin": { "x": 0, "y": 512 },
-        "xMax": { "x": 1024, "y": 512 },
-        "yMin": { "x": 512, "y": 1024 },
-        "yMax": { "x": 512, "y": 0 }
+        "xMin": { "x": 0, "y": 2048 },
+        "xMax": { "x": 4096, "y": 2048 },
+        "yMin": { "x": 2048, "y": 4096 },
+        "yMax": { "x": 2048, "y": 0 }
       }
     }
   ]
