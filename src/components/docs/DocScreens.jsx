@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { OptionalParamsSection } from '../autobuilder/WaypointSidebar';
 
-export const FIELD_IMAGE = 'https://media.base44.com/images/public/6a033bb4c2b77149a04836f8/b5bb0f72c_image.png';
+export const FIELD_IMAGE = '/fields/frc/rebuilt_2026.png';
 
 export const DOC_IMAGES = {
   welcome: '/docs/welcome.png',

@@ -1,4 +1,3 @@
-import { base44 } from '@/api/base44Client';
 import { 
   getProjectDir, 
   loadPathsFromProject, 
@@ -23,6 +22,39 @@ import { normalizeSavedPaths } from './pathWaypoints';
 
 const APP_SETTINGS_STORAGE_KEY = 'brainstem_app_settings';
 const LEAGUE_STORAGE_KEY = 'brainstem_league_preference';
+
+const LOCAL_ENTITY_KEYS = {
+  RobotSettings: 'brainstem_local_robot_settings',
+  SubsystemConfig: 'brainstem_local_subsystem_config',
+};
+
+function readLocalEntity(entityType) {
+  const key = LOCAL_ENTITY_KEYS[entityType];
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalEntity(entityType, data) {
+  const key = LOCAL_ENTITY_KEYS[entityType];
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch { /* ignore */ }
+}
+
+function makeRecord(data) {
+  return {
+    id: `gen-${Date.now()}`,
+    created_date: new Date().toISOString(),
+    updated_date: new Date().toISOString(),
+    ...data,
+  };
+}
 
 function getStoredLeaguePreference() {
   try {
@@ -200,9 +232,16 @@ export async function readEntity(entityType) {
       } catch { /* ignore */ }
       return defaultAppSettings();
     }
+    if (entityType === 'RobotSettings') {
+      const s = readLocalEntity(entityType);
+      return s ? ensureIds([s]) : [];
+    }
+    if (entityType === 'SubsystemConfig') {
+      const c = readLocalEntity(entityType);
+      return c ? ensureIds([c]) : [];
+    }
     return [];
   }
-  return await base44.entities[entityType].list();
 }
 
 export async function createEntity(entityType, data) {
@@ -252,9 +291,8 @@ export async function createEntity(entityType, data) {
       updated_date: new Date().toISOString(),
       ...data,
     };
-  } else {
-    return await base44.entities[entityType].create(data);
   }
+  return makeRecord(data);
 }
 
 export async function updateEntity(entityType, id, updates) {
@@ -312,11 +350,6 @@ export async function updateEntity(entityType, id, updates) {
       withIds[idx] = { ...withIds[idx], ...updates, updated_date: new Date().toISOString() };
       await writeToFolder(entityType, stripIds(withIds));
     }
-  } else {
-    await base44.entities[entityType].update(id, {
-      ...updates,
-      updated_date: new Date().toISOString(),
-    });
   }
 }
 
@@ -347,8 +380,6 @@ export async function deleteEntity(entityType, id) {
     const withIds = ensureIds(records);
     const filtered = withIds.filter(r => r.id !== id);
     await writeToFolder(entityType, stripIds(filtered));
-  } else {
-    await base44.entities[entityType].delete(id);
   }
 }
 
@@ -373,12 +404,7 @@ export async function writeEntity(entityType, data) {
     if (entityType === 'RobotSettings') await saveSettingsToProject(data);
     else if (entityType === 'SubsystemConfig') await saveSubsystemConfigToProject(data);
     else await writeToFolder(entityType, data);
-  } else {
-    const all = await base44.entities[entityType].list();
-    if (all.length > 0) {
-      await base44.entities[entityType].update(all[0].id, data);
-    } else {
-      await base44.entities[entityType].create(data);
-    }
+  } else if (entityType === 'RobotSettings' || entityType === 'SubsystemConfig') {
+    writeLocalEntity(entityType, data);
   }
 }

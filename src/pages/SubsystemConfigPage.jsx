@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
 import { ChevronLeft, Plus, Trash2, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { readEntity, writeEntity } from '../lib/dataService';

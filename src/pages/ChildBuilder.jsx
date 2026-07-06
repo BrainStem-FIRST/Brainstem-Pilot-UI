@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
 import { ChevronLeft, Route, Zap, Clock, GitBranch, SkipForward, Play, Plus, GitFork } from 'lucide-react';
 import { readEntity, updateEntity, createEntity } from '../lib/dataService';
 import { saveVariantToProject } from '../lib/projectFolder';

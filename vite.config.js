@@ -1,19 +1,44 @@
-import base44 from "@base44/vite-plugin"
+import path from 'path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+/**
+ * Wait until file changes stop, then trigger a single full page reload.
+ * Prevents a refresh storm when many files are saved in quick succession.
+ */
+function debouncedReloadPlugin(quietMs = 800) {
+  let timer = null;
+
+  return {
+    name: 'debounced-reload',
+    handleHotUpdate({ server }) {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        server.ws.send({ type: 'full-reload' });
+      }, quietMs);
+      return [];
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    watch: {
+      ignored: ['**/.cursor/**'],
+      awaitWriteFinish: {
+        stabilityThreshold: 300,
+        pollInterval: 100,
+      },
+    },
+  },
   plugins: [
-    base44({
-      // Support for legacy code that imports the base44 SDK with @/integrations, @/entities, etc.
-      // can be removed if the code has been updated to use the new SDK imports from @base44/sdk
-      legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
-      hmrNotifier: true,
-      navigationNotifier: true,
-      analyticsTracker: true,
-      visualEditAgent: true
-    }),
+    debouncedReloadPlugin(),
     react(),
-  ]
+  ],
 });
