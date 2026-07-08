@@ -1,25 +1,6 @@
 import path from 'path'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vite'
-
-/**
- * Wait until file changes stop, then trigger a single full page reload.
- * Prevents a refresh storm when many files are saved in quick succession.
- */
-function debouncedReloadPlugin(quietMs = 800) {
-  let timer = null;
-
-  return {
-    name: 'debounced-reload',
-    handleHotUpdate({ server }) {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        server.ws.send({ type: 'full-reload' });
-      }, quietMs);
-      return [];
-    },
-  };
-}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -28,17 +9,34 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    noDiscovery: true,
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-router-dom',
+      '@tanstack/react-query',
+      '@hello-pangea/dnd',
+      'framer-motion',
+      'lucide-react',
+      'clsx',
+      'tailwind-merge',
+      'class-variance-authority',
+    ],
+  },
   server: {
+    open: true,
     watch: {
-      ignored: ['**/.cursor/**'],
-      awaitWriteFinish: {
-        stabilityThreshold: 300,
-        pollInterval: 100,
-      },
+      ignored: [
+        '**/.git/**',
+        '**/.cursor/**',
+        '**/node_modules/**',
+        '**/dist/**',
+      ],
     },
   },
-  plugins: [
-    debouncedReloadPlugin(),
-    react(),
-  ],
+  plugins: [react()],
 });
