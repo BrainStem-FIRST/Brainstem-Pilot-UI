@@ -171,12 +171,15 @@ export default function AutoBuilder() {
     const savedConstraints = {};
     if (customizedConstraintsRef.current.maxVel) savedConstraints.maxVel = c.maxVel;
     if (customizedConstraintsRef.current.maxAccel) savedConstraints.maxAccel = c.maxAccel;
-    const pathData = { id, name, waypoints: wps, constraints: savedConstraints, subsystemTriggers: trigs, rotationTargets: rots, startSide: side ?? startSide };
+    const pathData = { id, name, waypoints: wps, constraints: savedConstraints, subsystemTriggers: trigs, rotationTargets: rots };
+    if (isFrc) {
+      pathData.startSide = side ?? startSide;
+    }
     const previousName = savedNameRef.current;
     await updateEntity('SavedAuto', id, pathData);
     await savePathToProject(pathData, previousName);
     savedNameRef.current = name;
-  }, [id]);
+  }, [id, isFrc]);
 
   const saveTimer = useRef(null);
   const scheduleSaveRef = useRef(null);
@@ -321,8 +324,10 @@ export default function AutoBuilder() {
         rotation: fmt4(t.rotation ?? 0),
         arcLengthM: fmt4(t.arcLengthM ?? 0),
       })),
-      startSide,
     };
+    if (isFrc) {
+      data.startSide = startSide;
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -330,7 +335,7 @@ export default function AutoBuilder() {
     a.download = `${pathName.replace(/\s+/g, '_')}.path.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [waypoints, constraints, pathName, subsystemTriggers, rotationTargets]);
+  }, [waypoints, constraints, pathName, subsystemTriggers, rotationTargets, isFrc, startSide]);
 
   const importPath = useCallback((e) => {
     const file = e.target.files[0];

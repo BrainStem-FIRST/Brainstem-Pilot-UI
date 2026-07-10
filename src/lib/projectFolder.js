@@ -21,6 +21,7 @@ const DEFAULT_FTC_ROBOT = {
   subsystems: [],
 };
 import { formatWaypointForExport, normalizeSavedPaths, getPathExportMetadata } from './pathWaypoints.js';
+import { syncFtcOpmodeAuto, deleteFtcOpmodeAuto, syncAllFtcOpmodeAutos } from './ftcOpmodeGenerator.js';
 
 let _dirHandle = null;
 
@@ -112,6 +113,7 @@ export async function deleteVariantFromProject(name) {
     const safeName = safeNameFromString(name);
     if (!safeName) return;
     await deleteFileIfExists(dir, `${safeName}.variant.json`);
+    await deleteFtcOpmodeAuto(name);
   } catch (_) { /* ignore */ }
 }
 
@@ -143,6 +145,7 @@ export async function saveVariantToProject(variantObj, previousName) {
   const writable = await fh.createWritable();
   await writable.write(JSON.stringify(variantObj, null, 2));
   await writable.close();
+  await syncFtcOpmodeAuto(variantObj, previousName);
 }
 
 export async function saveSettingsToProject(settingsObj) {
@@ -265,7 +268,10 @@ export async function loadAppSettingsFromProject() {
 
 export async function initializeProjectFolder(projectType = 'frc') {
   if (!_dirHandle) return;
-  const league = projectType === 'ftc' ? 'ftc' : 'frc';
+  const existingAppSettings = await loadAppSettingsFromProject();
+  const league = existingAppSettings?.projectType === 'ftc' || existingAppSettings?.projectType === 'frc'
+    ? existingAppSettings.projectType
+    : (projectType === 'ftc' ? 'ftc' : 'frc');
   const settingsExists = await loadSettingsFromProject();
   if (!settingsExists) {
     await saveSettingsToProject(league === 'ftc' ? DEFAULT_FTC_ROBOT : DEFAULT_FRC_ROBOT);
@@ -280,5 +286,8 @@ export async function initializeProjectFolder(projectType = 'frc') {
       projectType: league,
       selectedFieldId: getDefaultFieldId(league),
     });
+  }
+  if (league === 'ftc') {
+    await syncAllFtcOpmodeAutos();
   }
 }
