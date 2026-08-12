@@ -2,7 +2,7 @@
 
 A web-based trajectory planner for FRC/FTC robots that lets you visually build smooth Bezier paths, set holonomic rotation targets, and place mid-path subsystem action markers. It automatically exports clean path and auto json files ready for your robot code.
 
-**Live app:** [keerthanavisveish.github.io/Brainstem-Pilot-UI](https://keerthanavisveish.github.io/Brainstem-Pilot-UI)
+**Live app:** [brainstem-first.github.io/Brainstem-Pilot-UI/](https://brainstem-first.github.io/Brainstem-Pilot-UI/)
 
 ## What it does
 
