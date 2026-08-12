@@ -54,9 +54,10 @@ export function getFieldDimensions(field = activeField) {
 }
 
 export function getFieldImageUrl(field = activeField) {
-  if (!field) return '/fields/frc/rebuilt_2026.png';
+  const base = import.meta.env.BASE_URL;
+  if (!field) return `${base}fields/frc/rebuilt_2026.png`;
   if (field.imageUrl) return field.imageUrl;
-  return `/fields/${field.imageFile}`;
+  return `${base}fields/${field.imageFile}`;
 }
 
 export function computeFieldPadding(field = activeField) {

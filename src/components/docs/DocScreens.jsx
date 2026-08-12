@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { OptionalParamsSection } from '../autobuilder/WaypointSidebar';
 
-export const FIELD_IMAGE = '/fields/frc/rebuilt_2026.png';
+const BASE = import.meta.env.BASE_URL;
+
+export const FIELD_IMAGE = `${BASE}fields/frc/rebuilt_2026.png`;
 
 export const DOC_IMAGES = {
-  welcome: '/docs/welcome.png',
-  pathsList: '/docs/paths-list.png',
-  pathEditor: '/docs/path-editor.png',
-  waypointsZoom: '/docs/waypoints-zoom.png',
-  constraintsPanel: '/docs/constraints-panel.png',
-  rotationTargets: '/docs/rotation-targets.png',
-  subsystemTriggers: '/docs/subsystem-triggers.png',
-  skeletonBuilder: '/docs/skeleton-builder.png',
-  variantAuto: '/docs/variant-auto.png',
-  robotSettings: '/docs/robot-settings.png',
-  appSettings: '/docs/app-settings.png',
-  simulator: '/docs/simulator.png',
-  subsystemConfig: '/docs/subsystem-config.png',
+  welcome: `${BASE}docs/welcome.png`,
+  pathsList: `${BASE}docs/paths-list.png`,
+  pathEditor: `${BASE}docs/path-editor.png`,
+  waypointsZoom: `${BASE}docs/waypoints-zoom.png`,
+  constraintsPanel: `${BASE}docs/constraints-panel.png`,
+  rotationTargets: `${BASE}docs/rotation-targets.png`,
+  subsystemTriggers: `${BASE}docs/subsystem-triggers.png`,
+  skeletonBuilder: `${BASE}docs/skeleton-builder.png`,
+  variantAuto: `${BASE}docs/variant-auto.png`,
+  robotSettings: `${BASE}docs/robot-settings.png`,
+  appSettings: `${BASE}docs/app-settings.png`,
+  simulator: `${BASE}docs/simulator.png`,
+  subsystemConfig: `${BASE}docs/subsystem-config.png`,
 };
 
 export function DocScreenshot({ src, alt, caption, className = '' }) {
