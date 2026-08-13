@@ -6,7 +6,7 @@ import { useLeague } from '../../context/LeagueContext';
 import { getMotionUnitsForLeague } from '../../lib/motionUnits';
 
 // Angle input that allows typing a negative sign without stomping the value
-function AngleInput({ value, onChange }) {
+function AngleInput({ value, onChange, onEditStart, onEditEnd }) {
   const [text, setText] = useState(String(parseFloat((value ?? 0).toFixed(1))));
   const focused = React.useRef(false);
 
@@ -19,6 +19,7 @@ function AngleInput({ value, onChange }) {
 
   const commit = () => {
     focused.current = false;
+    onEditEnd?.();
     const parsed = parseFloat(text);
     if (!isNaN(parsed)) onChange(parsed);
     else setText(String(parseFloat((value ?? 0).toFixed(1))));
@@ -28,7 +29,7 @@ function AngleInput({ value, onChange }) {
     <input
       type="text"
       value={text}
-      onFocus={(e) => { focused.current = true; e.currentTarget.select(); }}
+      onFocus={(e) => { focused.current = true; onEditStart?.(); e.currentTarget.select(); }}
       onChange={(e) => {
         const v = e.target.value;
         // Allow anything that could be part of a valid number: digits, minus, dot
@@ -41,19 +42,52 @@ function AngleInput({ value, onChange }) {
   );
 }
 
-function NumberInput({ label, value, onChange, step = 0.01, min, max, unit }) {
+const NUMERIC_INPUT_PATTERN = /^-?\d*\.?\d*$/;
+
+function NumberInput({ label, value, onChange, min, max, unit, decimals = 4, onEditStart, onEditEnd, className }) {
+  const format = (v) => parseFloat((v ?? 0).toFixed(decimals));
+  const [text, setText] = useState(String(format(value)));
+  const focused = React.useRef(false);
+
+  useEffect(() => {
+    if (focused.current) return;
+    setText(String(format(value)));
+  }, [value, decimals]);
+
+  const commit = () => {
+    focused.current = false;
+    onEditEnd?.();
+    const parsed = parseFloat(text);
+    if (!isNaN(parsed)) {
+      let next = parsed;
+      if (min != null) next = Math.max(min, next);
+      if (max != null) next = Math.min(max, next);
+      onChange(next);
+      setText(String(format(next)));
+    } else {
+      setText(String(format(value)));
+    }
+  };
+
+  const applyText = (nextText) => {
+    if (nextText === '' || nextText === '-' || nextText === '-.' || NUMERIC_INPUT_PATTERN.test(nextText)) {
+      setText(nextText);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs text-muted-foreground font-medium">{label}</label>
+    <div className={label ? 'flex flex-col gap-1' : undefined}>
+      {label && <label className="text-xs text-muted-foreground font-medium">{label}</label>}
       <div className="flex items-center gap-1">
         <input
-          type="number"
-          value={parseFloat(value?.toFixed(4) ?? 0)}
-          step={step}
-          min={min}
-          max={max}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors w-0" 
+          type="text"
+          inputMode="decimal"
+          value={text}
+          onFocus={(e) => { focused.current = true; onEditStart?.(); e.currentTarget.select(); }}
+          onChange={(e) => applyText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          className={className ?? 'flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors w-0'}
         />
         {unit && <span className="text-xs text-muted-foreground shrink-0">{unit}</span>}
       </div>
@@ -63,7 +97,7 @@ function NumberInput({ label, value, onChange, step = 0.01, min, max, unit }) {
 
 const OPTIONAL_PARAMS_FRC = getMotionUnitsForLeague('frc').optionalParams;
 
-export function OptionalParamsSection({ wp, onUpdate, initialOpen = false, optionalParams = OPTIONAL_PARAMS_FRC }) {
+export function OptionalParamsSection({ wp, onUpdate, initialOpen = false, optionalParams = OPTIONAL_PARAMS_FRC, onEditStart }) {
   const [open, setOpen] = useState(initialOpen);
   const params = wp.params ?? {};
 
@@ -102,9 +136,15 @@ export function OptionalParamsSection({ wp, onUpdate, initialOpen = false, optio
                       {params[p.key] ? 'true' : 'false'}
                     </button> :
                     <div className="flex items-center gap-1 shrink-0">
-                      <input type="number" value={params[p.key]} step={p.step} min={p.min} max={p.max}
-                        onChange={(e) => setParam(p.key, parseFloat(e.target.value))}
-                        className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors" />
+                      <NumberInput
+                        value={params[p.key]}
+                        onChange={(v) => setParam(p.key, v)}
+                        min={p.min}
+                        max={p.max}
+                        decimals={4}
+                        onEditStart={onEditStart}
+                        className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors"
+                      />
                       {p.unit && <span className="text-[10px] text-muted-foreground">{p.unit}</span>}
                     </div>
                 )}
@@ -117,13 +157,14 @@ export function OptionalParamsSection({ wp, onUpdate, initialOpen = false, optio
   );
 }
 
-function RotationTargetsSection({ targets, onUpdate, onUpdateProgressOnly, totalLength, initialOpen = false }) {
+function RotationTargetsSection({ targets, onUpdate, onUpdateProgressOnly, totalLength, initialOpen = false, onEditStart, onEditEnd, onRecordHistory }) {
   const [open, setOpen] = useState(initialOpen);
 
   const addTarget = () => {
+    onRecordHistory?.();
     onUpdate([...(targets ?? []), { id: `rot-${Date.now()}`, progress: 0, rotation: 0 }]);
   };
-  const removeTarget = (i) => onUpdate((targets ?? []).filter((_, idx) => idx !== i));
+  const removeTarget = (i) => { onRecordHistory?.(); onUpdate((targets ?? []).filter((_, idx) => idx !== i)); };
   const updateTarget = (i, updates) => {
     onUpdate((targets ?? []).map((t, idx) => idx === i ? { ...t, ...updates } : t));
   };
@@ -151,7 +192,8 @@ function RotationTargetsSection({ targets, onUpdate, onUpdateProgressOnly, total
                 <span className="text-[10px] text-cyan-400 font-semibold">@ {Math.round((tgt.progress ?? 0) * 100)}%</span>
                 <input type="range" min={0} max={1} step={0.01} value={tgt.progress ?? 0}
                   onChange={(e) => updateProgress(i, parseFloat(e.target.value))}
-                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => { e.stopPropagation(); onEditStart?.(); }}
+                  onMouseUp={() => onEditEnd?.()}
                   className="flex-1 accent-primary" />
                 <button onClick={() => removeTarget(i)} className="text-destructive/50 hover:text-destructive">
                   <Trash2 className="w-3 h-3" />
@@ -161,9 +203,10 @@ function RotationTargetsSection({ targets, onUpdate, onUpdateProgressOnly, total
                 <label className="text-[10px] text-muted-foreground shrink-0">Rot</label>
                 <input type="range" min={-180} max={180} step={1} value={-(tgt.rotation ?? 0)}
                   onChange={(e) => updateTarget(i, { rotation: -parseFloat(e.target.value) })}
-                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => { e.stopPropagation(); onEditStart?.(); }}
+                  onMouseUp={() => onEditEnd?.()}
                   className="flex-1 accent-primary min-w-0" />
-                <AngleInput value={tgt.rotation ?? 0} onChange={(v) => updateTarget(i, { rotation: v })} />
+                <AngleInput value={tgt.rotation ?? 0} onChange={(v) => updateTarget(i, { rotation: v })} onEditStart={onEditStart} onEditEnd={onEditEnd} />
                 <span className="text-[10px] text-muted-foreground shrink-0">°</span>
               </div>
             </div>
@@ -178,7 +221,7 @@ function RotationTargetsSection({ targets, onUpdate, onUpdateProgressOnly, total
   );
 }
 
-function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit = 'm', initialOpen = false }) {
+function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit = 'm', initialOpen = false, onEditStart, onEditEnd, onRecordHistory }) {
   const [open, setOpen] = useState(initialOpen);
   const [subsystems, setSubsystems] = useState([]);
 
@@ -190,9 +233,10 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
   }, []);
 
   const addTrigger = () => {
+    onRecordHistory?.();
     onUpdate([...(triggers ?? []), { id: `trig-${Date.now()}`, subsystemName: '', commandName: '', progress: 0, arcLengthM: 0 }]);
   };
-  const removeTrigger = (i) => onUpdate((triggers ?? []).filter((_, idx) => idx !== i));
+  const removeTrigger = (i) => { onRecordHistory?.(); onUpdate((triggers ?? []).filter((_, idx) => idx !== i)); };
   const updateTrigger = (i, updates) => onUpdate((triggers ?? []).map((t, idx) => idx === i ? { ...t, ...updates } : t));
 
   const updateProgress = (i, progress) => {
@@ -224,7 +268,8 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
                   </span>
                   <input type="range" min={0} max={1} step={0.01} value={trig.progress ?? 0}
                     onChange={(e) => updateProgress(i, parseFloat(e.target.value))}
-                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => { e.stopPropagation(); onEditStart?.(); }}
+                    onMouseUp={() => onEditEnd?.()}
                     className="flex-1 accent-primary" />
                   <button onClick={() => removeTrigger(i)} className="text-destructive/50 hover:text-destructive">
                     <Trash2 className="w-3 h-3" />
@@ -263,12 +308,14 @@ export default function WaypointSidebar({
   rotationTargetsInitialOpen = false,
   subsystemTriggersInitialOpen = false,
   optionalParamsInitialOpen = false,
+  onEditStart,
+  onEditEnd,
+  onRecordHistory,
 }) {
   const selected = selectedIndex !== null ? waypoints[selectedIndex] : null;
   const { bounds, unit } = useFieldConfig();
   const { projectType } = useLeague();
   const motionUnits = getMotionUnitsForLeague(projectType);
-  const posStep = unit === 'in' ? 1 : 0.1;
   const [sidebarWidth, setSidebarWidth] = React.useState(256);
   const resizing = React.useRef(false);
 
@@ -326,8 +373,8 @@ export default function WaypointSidebar({
           </div>
           {selected ?
             <div className="space-y-3">
-              <NumberInput label="X Position" value={selected.x} onChange={(v) => onUpdate(selectedIndex, { x: v })} step={posStep} min={bounds.xMin} max={bounds.xMax} unit={unit} />
-              <NumberInput label="Y Position" value={selected.y} onChange={(v) => onUpdate(selectedIndex, { y: v })} step={posStep} min={bounds.yMin} max={bounds.yMax} unit={unit} />
+              <NumberInput label="X Position" value={selected.x} onChange={(v) => onUpdate(selectedIndex, { x: v })} min={bounds.xMin} max={bounds.xMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
+              <NumberInput label="Y Position" value={selected.y} onChange={(v) => onUpdate(selectedIndex, { y: v })} min={bounds.yMin} max={bounds.yMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
               {onInsertAfter && selectedIndex < waypoints.length - 1 &&
                 <button onClick={() => onInsertAfter(selectedIndex)}
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-md text-xs font-medium hover:bg-primary/20 transition-all">
@@ -340,15 +387,17 @@ export default function WaypointSidebar({
                   <label className="text-xs text-muted-foreground font-medium">Robot Rotation</label>
                   <div className="flex items-center gap-2">
                     <input type="range" min={-180} max={180} step={1} value={-(selected.rotation ?? 0)}
+                      onMouseDown={() => onEditStart?.()}
+                      onMouseUp={() => onEditEnd?.()}
                       onChange={(e) => onUpdate(selectedIndex, { rotation: -parseFloat(e.target.value) })}
                       className="flex-1 accent-primary" />
-                    <AngleInput value={selected.rotation ?? 0} onChange={(v) => onUpdate(selectedIndex, { rotation: v })} />
+                    <AngleInput value={selected.rotation ?? 0} onChange={(v) => onUpdate(selectedIndex, { rotation: v })} onEditStart={onEditStart} onEditEnd={onEditEnd} />
                     <span className="text-xs text-muted-foreground">°</span>
                   </div>
                 </div>
               )}
               {selectedIndex !== 0 && (
-                <OptionalParamsSection wp={selected} onUpdate={(updates) => onUpdate(selectedIndex, updates)} initialOpen={optionalParamsInitialOpen} optionalParams={motionUnits.optionalParams} />
+                <OptionalParamsSection wp={selected} onUpdate={(updates) => onUpdate(selectedIndex, updates)} initialOpen={optionalParamsInitialOpen} optionalParams={motionUnits.optionalParams} onEditStart={onEditStart} />
               )}
             </div> :
             <p className="text-xs text-muted-foreground">
@@ -366,6 +415,9 @@ export default function WaypointSidebar({
               onUpdateProgressOnly={(rots) => onUpdateRotationTargets(rots, true)}
               totalLength={trajectory?.totalLength ?? 1}
               initialOpen={rotationTargetsInitialOpen}
+              onEditStart={onEditStart}
+              onEditEnd={onEditEnd}
+              onRecordHistory={onRecordHistory}
             />
           </div>
         }
@@ -379,6 +431,9 @@ export default function WaypointSidebar({
               totalLength={trajectory?.totalLength ?? 0}
               lengthUnit={motionUnits.lengthUnit}
               initialOpen={subsystemTriggersInitialOpen}
+              onEditStart={onEditStart}
+              onEditEnd={onEditEnd}
+              onRecordHistory={onRecordHistory}
             />
           </div>
         }
@@ -392,8 +447,8 @@ export default function WaypointSidebar({
             <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Constraints</h3>
           </div>
           <div className="space-y-3">
-            <NumberInput label="Max Velocity" value={constraints.maxVel} onChange={(v) => setConstraints((c) => ({ ...c, maxVel: Math.min(motionUnits.constraintMax, Math.max(motionUnits.constraintMin, v)) }))} step={motionUnits.constraintStep} min={motionUnits.constraintMin} max={motionUnits.constraintMax} unit={motionUnits.speedUnit} />
-            <NumberInput label="Max Acceleration" value={constraints.maxAccel} onChange={(v) => setConstraints((c) => ({ ...c, maxAccel: Math.min(motionUnits.constraintMax, Math.max(motionUnits.constraintMin, v)) }))} step={motionUnits.constraintStep} min={motionUnits.constraintMin} max={motionUnits.constraintMax} unit={motionUnits.accelUnit} />
+            <NumberInput label="Max Velocity" value={constraints.maxVel} onChange={(v) => setConstraints((c) => ({ ...c, maxVel: Math.min(motionUnits.constraintMax, Math.max(motionUnits.constraintMin, v)) }))} min={motionUnits.constraintMin} max={motionUnits.constraintMax} unit={motionUnits.speedUnit} onEditStart={onEditStart} onEditEnd={onEditEnd} />
+            <NumberInput label="Max Acceleration" value={constraints.maxAccel} onChange={(v) => setConstraints((c) => ({ ...c, maxAccel: Math.min(motionUnits.constraintMax, Math.max(motionUnits.constraintMin, v)) }))} min={motionUnits.constraintMin} max={motionUnits.constraintMax} unit={motionUnits.accelUnit} onEditStart={onEditStart} onEditEnd={onEditEnd} />
           </div>
         </div>
 

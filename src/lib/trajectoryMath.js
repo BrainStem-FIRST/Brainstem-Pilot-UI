@@ -404,6 +404,22 @@ export function mirrorWaypointForRed(wp) {
   };
 }
 
+/** Mirror waypoint across the vertical field axis (y-axis) — for center-origin fields (FTC). */
+export function mirrorWaypointAcrossYAxis(wp) {
+  if (!wp) return null;
+  const mirroredRotation = normAngle(180 - (wp.rotation ?? 0));
+  const mirroredPrev = wp.prevControl ? { x: -wp.prevControl.x, y: wp.prevControl.y } : null;
+  const mirroredNext = wp.nextControl ? { x: -wp.nextControl.x, y: wp.nextControl.y } : null;
+  return {
+    ...wp,
+    x: -wp.x,
+    y: wp.y,
+    rotation: mirroredRotation,
+    prevControl: mirroredPrev,
+    nextControl: mirroredNext,
+  };
+}
+
 function getBezierPoint(p0, p1, p2, p3, t) {
   const cx = 3 * (p1.x - p0.x);
   const bx = 3 * (p2.x - p1.x) - cx;
@@ -504,6 +520,21 @@ export function mirrorTrajectoryFieldSide(traj) {
       heading: normAngle(-(s.heading ?? 0)),
       pathHeading: normAngle(-(s.pathHeading ?? s.heading ?? 0)),
       rotation: s.rotation != null ? normAngle(-s.rotation) : undefined,
+    })),
+  };
+}
+
+/** Mirror trajectory across the vertical field axis (y-axis) — for center-origin fields (FTC). */
+export function mirrorTrajectoryAcrossYAxis(traj) {
+  if (!traj?.states) return traj;
+  return {
+    ...traj,
+    states: traj.states.map(s => ({
+      ...s,
+      x: -s.x,
+      heading: normAngle(180 - (s.heading ?? 0)),
+      pathHeading: normAngle(180 - (s.pathHeading ?? s.heading ?? 0)),
+      rotation: s.rotation != null ? normAngle(180 - s.rotation) : undefined,
     })),
   };
 }

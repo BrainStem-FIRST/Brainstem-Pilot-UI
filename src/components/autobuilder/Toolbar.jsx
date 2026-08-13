@@ -1,10 +1,11 @@
 import React from 'react';
-import { MousePointer2, Plus, Eye, EyeOff, Trash2, ChevronLeft } from 'lucide-react';
+import { MousePointer2, Plus, Eye, EyeOff, Trash2, ChevronLeft, Undo2, Redo2 } from 'lucide-react';
 
 export default function Toolbar({
   tool, setTool, showVelocity, setShowVelocity,
   pathName, setPathName, onClear, waypointCount, onBack,
   startSide, onStartSideChange, showStartSide = true,
+  onUndo, onRedo, canUndo, canRedo,
 }) {
 
   const tools = [
@@ -24,11 +25,33 @@ export default function Toolbar({
 
       {/* Path name — grows to fill space */}
       <input
+        data-path-name
         value={pathName}
         onChange={e => setPathName(e.target.value)}
         className="bg-transparent border-none outline-none text-sm font-semibold text-foreground flex-1 min-w-0 max-w-xs focus:bg-secondary/50 px-1.5 py-0.5 rounded transition-colors"
         placeholder="Path name..."
       />
+
+      <div className="w-px h-5 bg-border" />
+
+      <div className="flex items-center gap-0.5">
+        <button
+          title="Undo (Ctrl+Z)"
+          onClick={onUndo}
+          disabled={!canUndo}
+          className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Undo2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          title="Redo (Ctrl+Y)"
+          onClick={onRedo}
+          disabled={!canRedo}
+          className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Redo2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       <div className="w-px h-5 bg-border" />
 

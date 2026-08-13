@@ -51,6 +51,7 @@ export default function FieldCanvas({
   onAddWaypoint, onUpdateWaypoint, onDeleteWaypoint, onSelectWaypoint,
   robotSettings, zoom, setZoom, onResetView,
   subsystemTriggers, subsystemConfig, rotationTargets, onUpdateRotationTargets,
+  onBeginEdit, onEndEdit,
 }) {
   const { bounds, unit, imageUrl, activeField } = useFieldConfig();
   const { projectType } = useLeague();
@@ -548,6 +549,11 @@ export default function FieldCanvas({
 
   // ── Mouse handlers ────────────────────────────────────────────────────────
 
+  const startDrag = useCallback((dragState) => {
+    onBeginEdit?.();
+    setDragging(dragState);
+  }, [onBeginEdit]);
+
   const handleMouseDown = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -563,7 +569,7 @@ export default function FieldCanvas({
         // FIX: Account for the negative mapping multiplier during dragging angle assignment initialization
         const currentCanvasAngle = (-(tgt.rotation ?? 0) * Math.PI / 180) + Math.PI / 2;
         const angularOffset = mouseAngle - currentCanvasAngle;
-        setDragging({ type: 'rotationTarget', index: rtHit, angularOffset });
+        startDrag({ type: 'rotationTarget', index: rtHit, angularOffset });
         return;
       }
     }
@@ -577,21 +583,21 @@ export default function FieldCanvas({
       // FIX: Account for the negative mapping multiplier during dragging angle assignment initialization
       const currentCanvasAngle = (-(wp.rotation ?? 0) * Math.PI / 180) + Math.PI / 2;
       const angularOffset = mouseAngle - currentCanvasAngle;
-      setDragging({ type: 'rotation', index: rotDotHit, angularOffset });
+      startDrag({ type: 'rotation', index: rotDotHit, angularOffset });
       return;
     }
 
     const ctrlHit = hitControlHandle(px, py);
     if (ctrlHit) {
       onSelectWaypoint(ctrlHit.index);
-      setDragging({ type: 'control', controlType: ctrlHit.type, index: ctrlHit.index });
+      startDrag({ type: 'control', controlType: ctrlHit.type, index: ctrlHit.index });
       return;
     }
 
     const hit = hitWaypoint(px, py);
     if (hit >= 0) {
       onSelectWaypoint(hit);
-      setDragging({ type: 'waypoint', index: hit });
+      startDrag({ type: 'waypoint', index: hit });
       return;
     }
 
@@ -625,7 +631,7 @@ export default function FieldCanvas({
     } else {
       onSelectWaypoint(null);
     }
-  }, [tool, pan, hitRotationDot, hitControlHandle, hitWaypoint, hitRotationTargetDot, toMeter, toPixel, onAddWaypoint, onUpdateWaypoint, onSelectWaypoint, waypoints, rotationTargets, trajectory, onUpdateRotationTargets]);
+  }, [tool, pan, hitRotationDot, hitControlHandle, hitWaypoint, hitRotationTargetDot, toMeter, toPixel, onAddWaypoint, onUpdateWaypoint, onSelectWaypoint, waypoints, rotationTargets, trajectory, onUpdateRotationTargets, startDrag]);
 
   const handleMouseMove = useCallback((e) => {
     if (!dragging) return;
@@ -707,7 +713,10 @@ export default function FieldCanvas({
     }
   }, [dragging, toMeter, toPixel, onUpdateWaypoint, onUpdateRotationTargets, waypoints, rotationTargets, trajectory]);
 
-  const handleMouseUp = useCallback(() => setDragging(null), []);
+  const handleMouseUp = useCallback(() => {
+    if (dragging) onEndEdit?.();
+    setDragging(null);
+  }, [dragging, onEndEdit]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();

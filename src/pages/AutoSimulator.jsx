@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Play, Square, RotateCcw, Zap, Clock, GitBranch, ChevronDown } from 'lucide-react';
-import { generateTrajectory, getPoseAtProgress, mirrorTrajectoryFieldSide, chainPathToPose } from '../lib/trajectoryMath';
+import { generateTrajectory, getPoseAtProgress, mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis, chainPathToPose } from '../lib/trajectoryMath';
 import { fieldToPixels, computeFieldLayout, drawFieldImage, getDefaultSimulatorView, clampPan } from '../lib/fieldCoordinates';
 import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
@@ -518,44 +518,43 @@ export default function AutoSimulator() {
     if (!seg.trajectory) return seg;
 
     let traj = seg.trajectory;
-    if (isFrc && fieldSide !== (seg.startSide ?? 'R')) {
-      traj = mirrorTrajectoryFieldSide(traj);
+    if (isFrc) {
+      if (fieldSide !== (seg.startSide ?? 'R')) {
+        traj = mirrorTrajectoryFieldSide(traj);
+      }
+      if (alliance === 'red') {
+        const { xMax, yMax } = bounds;
+        const transformPointForRed = (p) => {
+          const rawHeading = p.heading ?? p.rotation ?? 0;
+          const rawRotation = p.rotation ?? p.heading ?? 0;
+          return {
+            ...p,
+            x: xMax - p.x,
+            y: yMax - p.y,
+            heading: wrapAngle(rawHeading - 180),
+            rotation: wrapAngle(rawRotation - 180),
+          };
+        };
+        traj = {
+          ...traj,
+          states: traj.states.map(transformPointForRed),
+        };
+      }
+    } else if (alliance === 'red') {
+      traj = mirrorTrajectoryAcrossYAxis(traj);
     }
 
-    if (!isFrc || alliance === 'blue') {
-      return { ...seg, trajectory: traj };
-    }
-
-    const { xMax, yMax } = bounds;
-    const transformPointForRed = (p) => {
-      const rawHeading = p.heading ?? p.rotation ?? 0;
-      const rawRotation = p.rotation ?? p.heading ?? 0;
-      
-      return {
-        ...p,
-        x: xMax - p.x,
-        y: yMax - p.y,
-        heading: wrapAngle(rawHeading - 180),
-        rotation: wrapAngle(rawRotation - 180),
-      };
-    };
-
-    return {
-      ...seg,
-      trajectory: {
-        ...traj,
-        states: traj.states.map(transformPointForRed),
-      },
-      subsystemTriggers: seg.subsystemTriggers,
-    };
+    return { ...seg, trajectory: traj };
   });
 
-  const displayRotationTargets = !isFrc || alliance === 'blue'
-    ? (rotationTargets ?? [])
-    : (rotationTargets ?? []).map(t => ({
-        ...t,
-        rotation: wrapAngle(t.rotation - 180),
-      }));
+  const displayRotationTargets = (() => {
+    const targets = rotationTargets ?? [];
+    if (alliance === 'blue') return targets;
+    if (isFrc) {
+      return targets.map(t => ({ ...t, rotation: wrapAngle(t.rotation - 180) }));
+    }
+    return targets.map(t => ({ ...t, rotation: wrapAngle(180 - t.rotation) }));
+  })();
 
   if (allChildren.length === 0) {
     return (
@@ -599,53 +598,51 @@ export default function AutoSimulator() {
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
           {isFrc && (
-            <>
-              <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
-                <button
-                  onClick={() => setFieldSide('L')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
-                    fieldSide === 'L'
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Left
-                </button>
-                <button
-                  onClick={() => setFieldSide('R')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
-                    fieldSide === 'R'
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Right
-                </button>
-              </div>
-              <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
-                <button
-                  onClick={() => setAlliance('blue')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
-                    alliance === 'blue'
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Blue
-                </button>
-                <button
-                  onClick={() => setAlliance('red')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
-                    alliance === 'red'
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Red
-                </button>
-              </div>
-            </>
+            <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
+              <button
+                onClick={() => setFieldSide('L')}
+                className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                  fieldSide === 'L'
+                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Left
+              </button>
+              <button
+                onClick={() => setFieldSide('R')}
+                className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                  fieldSide === 'R'
+                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Right
+              </button>
+            </div>
           )}
+          <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
+            <button
+              onClick={() => setAlliance('blue')}
+              className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                alliance === 'blue'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Blue
+            </button>
+            <button
+              onClick={() => setAlliance('red')}
+              className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                alliance === 'red'
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Red
+            </button>
+          </div>
         </div>
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Simulation</span>
       </div>

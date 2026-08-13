@@ -9,11 +9,23 @@ import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
 import { getDefaultPathEditorView } from '../lib/fieldCoordinates';
 import { getMotionUnitsForLeague } from '../lib/motionUnits';
-import { normalizeSavedPath } from '../lib/pathWaypoints';
+import { normalizeSavedPath, serializeWaypointForClipboard, parseWaypointFromClipboard, insertPastedWaypoint } from '../lib/pathWaypoints';
 import { readEntity, updateEntity } from '../lib/dataService';
 import { savePathToProject } from '../lib/projectFolder';
 
 const lerp = (a, b, t) => a + (b - a) * t;
+const MAX_HISTORY = 100;
+
+function captureEditorState(ref) {
+  const { waypoints, constraints, subsystemTriggers, rotationTargets, startSide } = ref.current;
+  return {
+    waypoints: JSON.parse(JSON.stringify(waypoints)),
+    constraints: { ...constraints },
+    subsystemTriggers: JSON.parse(JSON.stringify(subsystemTriggers)),
+    rotationTargets: JSON.parse(JSON.stringify(rotationTargets)),
+    startSide,
+  };
+}
 
 export default function AutoBuilder() {
   const { id } = useParams();
@@ -21,6 +33,8 @@ export default function AutoBuilder() {
 
   const [waypoints, setWaypoints] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(null);
+  const selectedIndexRef = useRef(null);
+  selectedIndexRef.current = selectedIndex;
   const [tool, setTool] = useState('select');
   const { activeField } = useFieldConfig();
   const { projectType, isFrc } = useLeague();
@@ -42,6 +56,10 @@ export default function AutoBuilder() {
   const [zoom, setZoom] = useState(1.5);
   const resetPanRef = useRef(null);
   const canvasContainerRef = useRef(null);
+  const historyRef = useRef([]);
+  const futureRef = useRef([]);
+  const editSessionRef = useRef(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   // Unified State Tracker for deep async synchronization
   const stateRef = useRef({ waypoints, constraints, pathName, subsystemTriggers, rotationTargets, startSide });
@@ -189,6 +207,70 @@ export default function AutoBuilder() {
   };
   const scheduleSave = useCallback((overrides) => scheduleSaveRef.current(overrides), []);
 
+  const bumpHistory = useCallback(() => {
+    setHistoryVersion(v => v + 1);
+  }, []);
+
+  const pushHistory = useCallback(() => {
+    historyRef.current.push(captureEditorState(stateRef));
+    if (historyRef.current.length > MAX_HISTORY) historyRef.current.shift();
+    futureRef.current = [];
+    bumpHistory();
+  }, [bumpHistory]);
+
+  const restoreSnapshot = useCallback((snapshot) => {
+    setWaypoints(snapshot.waypoints);
+    setConstraints(snapshot.constraints);
+    setSubsystemTriggers(snapshot.subsystemTriggers);
+    setRotationTargets(snapshot.rotationTargets);
+    setStartSide(snapshot.startSide);
+    stateRef.current = {
+      ...stateRef.current,
+      waypoints: snapshot.waypoints,
+      constraints: snapshot.constraints,
+      subsystemTriggers: snapshot.subsystemTriggers,
+      rotationTargets: snapshot.rotationTargets,
+      startSide: snapshot.startSide,
+    };
+    if (snapshot.waypoints.length >= 2) {
+      recomputeTrajectory(snapshot.waypoints, snapshot.constraints, snapshot.rotationTargets);
+    } else {
+      setTrajectory(null);
+    }
+    scheduleSave(snapshot);
+  }, [recomputeTrajectory, scheduleSave]);
+
+  const undo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    futureRef.current.push(captureEditorState(stateRef));
+    const prev = historyRef.current.pop();
+    restoreSnapshot(prev);
+    bumpHistory();
+  }, [restoreSnapshot, bumpHistory]);
+
+  const redo = useCallback(() => {
+    if (futureRef.current.length === 0) return;
+    historyRef.current.push(captureEditorState(stateRef));
+    const next = futureRef.current.pop();
+    restoreSnapshot(next);
+    bumpHistory();
+  }, [restoreSnapshot, bumpHistory]);
+
+  const beginEdit = useCallback(() => {
+    if (editSessionRef.current) return;
+    editSessionRef.current = true;
+    pushHistory();
+  }, [pushHistory]);
+
+  const endEdit = useCallback(() => {
+    editSessionRef.current = null;
+  }, []);
+
+  const canUndo = historyRef.current.length > 0;
+  const canRedo = futureRef.current.length > 0;
+  // historyVersion keeps toolbar buttons in sync with ref-based stacks
+  void historyVersion;
+
   const handleNameChange = (name) => {
     setPathName(name);
     stateRef.current.pathName = name;
@@ -214,10 +296,11 @@ export default function AutoBuilder() {
 
   const handleStartSideChange = useCallback((newSide) => {
     if (newSide === startSide) return;
+    pushHistory();
     setStartSide(newSide);
     stateRef.current.startSide = newSide;
     scheduleSave({ startSide: newSide });
-  }, [startSide, scheduleSave]);
+  }, [startSide, scheduleSave, pushHistory]);
 
   const handleBack = async () => {
     clearTimeout(saveTimer.current);
@@ -226,6 +309,7 @@ export default function AutoBuilder() {
   };
 
   const addWaypoint = useCallback((wp) => {
+    pushHistory();
     setWaypoints(prev => {
       const next = [...prev, wp];
       stateRef.current.waypoints = next;
@@ -233,7 +317,7 @@ export default function AutoBuilder() {
       scheduleSave({ waypoints: next });
       return next;
     });
-  }, [recomputeTrajectory]);
+  }, [recomputeTrajectory, pushHistory]);
 
   const updateWaypoint = useCallback((index, updates) => {
     setWaypoints(prev => {
@@ -246,6 +330,7 @@ export default function AutoBuilder() {
   }, [recomputeTrajectory]);
 
   const deleteWaypoint = useCallback((index) => {
+    pushHistory();
     setWaypoints(prev => {
       const next = prev.filter((_, i) => i !== index);
       stateRef.current.waypoints = next;
@@ -254,9 +339,10 @@ export default function AutoBuilder() {
       scheduleSave({ waypoints: next });
       return next;
     });
-  }, [selectedIndex, recomputeTrajectory]);
+  }, [selectedIndex, recomputeTrajectory, pushHistory]);
 
   const insertWaypointAfter = useCallback((index) => {
+    pushHistory();
     setWaypoints(prev => {
       const a = prev[index];
       const b = prev[index + 1];
@@ -289,15 +375,43 @@ export default function AutoBuilder() {
       setSelectedIndex(index + 1);
       return next;
     });
-  }, [recomputeTrajectory]);
+  }, [recomputeTrajectory, pushHistory]);
 
   const clearAll = useCallback(() => {
+    if (waypoints.length === 0) return;
+    pushHistory();
     setWaypoints([]);
     setTrajectory(null);
     setSelectedIndex(null);
     setSimProgress(0);
     setIsSimulating(false);
+    scheduleSave({ waypoints: [] });
+  }, [waypoints.length, pushHistory, scheduleSave]);
+
+  const copySelectedWaypoint = useCallback(async () => {
+    const idx = selectedIndexRef.current;
+    if (idx == null) return;
+    const wp = stateRef.current.waypoints[idx];
+    if (!wp) return;
+    try {
+      await navigator.clipboard.writeText(serializeWaypointForClipboard(wp));
+    } catch {
+      // clipboard may be unavailable
+    }
   }, []);
+
+  const pasteWaypoint = useCallback((wp) => {
+    pushHistory();
+    const insertAt = selectedIndexRef.current != null ? selectedIndexRef.current + 1 : stateRef.current.waypoints.length;
+    setWaypoints(prev => {
+      const next = insertPastedWaypoint(prev, wp, insertAt);
+      stateRef.current.waypoints = next;
+      recomputeTrajectory(next);
+      scheduleSave({ waypoints: next });
+      return next;
+    });
+    setSelectedIndex(insertAt);
+  }, [pushHistory, recomputeTrajectory, scheduleSave]);
 
   const exportPath = useCallback(() => {
     const fmt4 = v => parseFloat(v.toFixed(4));
@@ -398,6 +512,43 @@ export default function AutoBuilder() {
     recomputeTrajectory(stateRef.current.waypoints, constraints, stateRef.current.rotationTargets);
   }, [constraints, recomputeTrajectory]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.target.closest('[data-path-name]')) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'c' && selectedIndexRef.current != null) {
+        e.preventDefault();
+        copySelectedWaypoint();
+        return;
+      }
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, copySelectedWaypoint]);
+
+  useEffect(() => {
+    const handlePaste = (e) => {
+      if (e.target.closest('[data-path-name]')) return;
+      const text = e.clipboardData?.getData('text/plain');
+      const wp = parseWaypointFromClipboard(text);
+      if (!wp) return;
+      e.preventDefault();
+      pasteWaypoint(wp);
+    };
+    window.addEventListener('paste', handlePaste, true);
+    return () => window.removeEventListener('paste', handlePaste, true);
+  }, [pasteWaypoint]);
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <Toolbar
@@ -413,6 +564,10 @@ export default function AutoBuilder() {
         startSide={startSide}
         onStartSideChange={handleStartSideChange}
         showStartSide={isFrc}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -437,6 +592,8 @@ export default function AutoBuilder() {
             subsystemConfig={subsystemConfig}
             rotationTargets={rotationTargets}
             onUpdateRotationTargets={handleRotationTargetsChange}
+            onBeginEdit={beginEdit}
+            onEndEdit={endEdit}
           />
           <button
             onClick={applyInitialView}
@@ -478,6 +635,9 @@ export default function AutoBuilder() {
           onUpdateTriggers={handleTriggersChange}
           rotationTargets={rotationTargets}
           onUpdateRotationTargets={handleRotationTargetsChange}
+          onEditStart={beginEdit}
+          onEditEnd={endEdit}
+          onRecordHistory={pushHistory}
         />
       </div>
     </div>
