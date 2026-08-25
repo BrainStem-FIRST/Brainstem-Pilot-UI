@@ -1,20 +1,20 @@
 import { 
   getProjectDir, 
   loadPathsFromProject, 
-  loadSkeletonsFromProject, 
-  loadVariantsFromProject,
+  loadPointsFromProject,
+  loadAutosFromProject,
   loadSettingsFromProject,
   loadSubsystemConfigFromProject,
   loadAppSettingsFromProject,
   savePathToProject,
-  saveSkeletonToProject,
-  saveVariantToProject,
+  savePointToProject,
+  saveAutoToProject,
   saveSettingsToProject,
   saveSubsystemConfigToProject,
   saveAppSettingsToProject,
   deletePathFromProject,
-  deleteSkeletonFromProject,
-  deleteVariantFromProject,
+  deletePointFromProject,
+  deleteAutoFromProject,
   safeNameFromString,
 } from './projectFolder';
 import { getDefaultFieldId } from './fieldConfig';
@@ -173,14 +173,14 @@ async function readSavedAutos() {
   return ensureIds(normalizeSavedPaths(paths));
 }
 
-async function readSkeletonAutos() {
-  const data = await loadSkeletonsFromProject();
+async function readPoints() {
+  const data = await loadPointsFromProject();
   if (!data) return [];
   return ensureIds(data);
 }
 
-async function readChildAutos() {
-  const data = await loadVariantsFromProject();
+async function readAutos() {
+  const data = await loadAutosFromProject();
   if (!data) return [];
   return ensureIds(data);
 }
@@ -202,12 +202,12 @@ async function writeSavedAuto(id, updates) {
 export async function readEntity(entityType) {
   if (getProjectDir()) {
     if (entityType === 'SavedAuto') return await readSavedAutos();
-    if (entityType === 'SkeletonAuto') {
-      const data = await loadSkeletonsFromProject();
+    if (entityType === 'Point') {
+      const data = await loadPointsFromProject();
       return data ? ensureIds(data) : [];
     }
-    if (entityType === 'ChildAuto') {
-      const data = await loadVariantsFromProject();
+    if (entityType === 'Auto') {
+      const data = await loadAutosFromProject();
       return data ? ensureIds(data) : [];
     }
     if (entityType === 'RobotSettings') {
@@ -259,7 +259,7 @@ export async function createEntity(entityType, data) {
       await savePathToProject(record, null);
       return record;
     }
-    if (entityType === 'SkeletonAuto') {
+    if (entityType === 'Point') {
       const id = safeNameFromString(data.name) || `gen-${Date.now()}`;
       const record = {
         id,
@@ -267,10 +267,10 @@ export async function createEntity(entityType, data) {
         updated_date: new Date().toISOString(),
         ...data,
       };
-      await saveSkeletonToProject(record, null);
+      await savePointToProject(record, null);
       return record;
     }
-    if (entityType === 'ChildAuto') {
+    if (entityType === 'Auto') {
       const id = safeNameFromString(data.name) || `gen-${Date.now()}`;
       const record = {
         id,
@@ -278,7 +278,7 @@ export async function createEntity(entityType, data) {
         updated_date: new Date().toISOString(),
         ...data,
       };
-      await saveVariantToProject(record, null);
+      await saveAutoToProject(record, null);
       return record;
     }
     const records = (await readFromFolder(entityType)) || [];
@@ -304,8 +304,8 @@ export async function updateEntity(entityType, id, updates) {
     return;
   }
 
-  if (entityType === 'SkeletonAuto' && folder) {
-    const all = await readSkeletonAutos();
+  if (entityType === 'Point' && folder) {
+    const all = await readPoints();
     const record = all.find(r => r.id === id);
     if (!record) return;
     const oldId = record.id;
@@ -313,19 +313,12 @@ export async function updateEntity(entityType, id, updates) {
     const newId = updates.name ? safeNameFromString(newName) : oldId;
     const updated = { ...record, ...updates, id: newId, updated_date: new Date().toISOString() };
     const previousName = updates.name && updates.name !== record.name ? record.name : null;
-    await saveSkeletonToProject(updated, previousName);
-
-    if (newId !== oldId) {
-      const variants = await readChildAutos();
-      for (const v of variants.filter(v => v.skeletonId === oldId)) {
-        await saveVariantToProject({ ...v, skeletonId: newId }, null);
-      }
-    }
+    await savePointToProject(updated, previousName);
     return;
   }
 
-  if (entityType === 'ChildAuto' && folder) {
-    const all = await readChildAutos();
+  if (entityType === 'Auto' && folder) {
+    const all = await readAutos();
     const record = all.find(r => r.id === id);
     if (!record) return;
     const oldId = record.id;
@@ -333,7 +326,7 @@ export async function updateEntity(entityType, id, updates) {
     const newId = updates.name ? safeNameFromString(newName) : oldId;
     const updated = { ...record, ...updates, id: newId, updated_date: new Date().toISOString() };
     const previousName = updates.name && updates.name !== record.name ? record.name : null;
-    await saveVariantToProject(updated, previousName);
+    await saveAutoToProject(updated, previousName);
     return;
   }
 
@@ -363,16 +356,16 @@ export async function deleteEntity(entityType, id) {
       await deletePathFromProject(record?.name ?? id);
       return;
     }
-    if (entityType === 'SkeletonAuto') {
-      const all = await readSkeletonAutos();
+    if (entityType === 'Point') {
+      const all = await readPoints();
       const record = all.find(r => r.id === id);
-      await deleteSkeletonFromProject(record?.name ?? id);
+      await deletePointFromProject(record?.name ?? id);
       return;
     }
-    if (entityType === 'ChildAuto') {
-      const all = await readChildAutos();
+    if (entityType === 'Auto') {
+      const all = await readAutos();
       const record = all.find(r => r.id === id);
-      await deleteVariantFromProject(record?.name ?? id);
+      await deleteAutoFromProject(record?.name ?? id);
       return;
     }
 

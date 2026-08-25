@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
-  fieldToPixels, pixelsToField, clampToField, clampPan,
+  fieldToPixels, pixelsToField, clampToField,
   computeFieldLayout, drawFieldImage, getGridSpacing,
 } from '../../lib/fieldCoordinates';
 import { getPoseAtProgress } from '../../lib/trajectoryMath';
@@ -52,9 +52,10 @@ export default function FieldCanvas({
   robotSettings, zoom, setZoom, onResetView,
   subsystemTriggers, subsystemConfig, rotationTargets, onUpdateRotationTargets,
   onBeginEdit, onEndEdit,
+  contextSegments,
 }) {
   const { bounds, unit, imageUrl, activeField } = useFieldConfig();
-  const { projectType } = useLeague();
+  const { projectType, isFtc } = useLeague();
   const motionUnits = getMotionUnitsForLeague(projectType);
   const defaultRobotSize = unit === 'in' ? 18 : 0.76;
   const ROBOT_W_M = robotSettings?.width ?? defaultRobotSize;
@@ -163,6 +164,35 @@ export default function FieldCanvas({
       const step = Math.max(1, Math.floor(pts.length / 20));
       for (let i = 0; i < pts.length; i += step) drawArrow(ctx, pts[i], 'rgba(255,220,50,0.8)');
     }
+  }
+
+  // Renders the other slots of an Auto's chained sequence in the background: solid
+  // curves for path slots, dashed straight lines for point slots, brighter when the
+  // slot is the currently-selected one in the workspace's left panel.
+  function drawContextSegments(ctx) {
+    if (!contextSegments?.length) return;
+    const s = getUiScale();
+    contextSegments.forEach((seg) => {
+      const pts = seg.trajectory?.states;
+      if (!pts || pts.length < 2) return;
+      ctx.beginPath();
+      const { px, py } = toPixel(pts[0].x, pts[0].y);
+      ctx.moveTo(px, py);
+      for (let i = 1; i < pts.length; i++) {
+        const { px: nx, py: ny } = toPixel(pts[i].x, pts[i].y);
+        ctx.lineTo(nx, ny);
+      }
+      ctx.setLineDash(seg.dashed ? [7 * s, 5 * s] : []);
+      ctx.strokeStyle = seg.highlighted ? 'rgba(255,220,50,0.9)' : 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = (seg.highlighted ? 3.5 : 2) * s;
+      if (seg.highlighted) {
+        ctx.shadowColor = 'rgba(255,220,50,0.5)';
+        ctx.shadowBlur = 6 * s;
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
+    });
   }
 
   function drawArrow(ctx, pt, color) {
@@ -409,7 +439,7 @@ export default function FieldCanvas({
   }
 
   // ── Draw loop ─────────────────────────────────────────────────────────────
-  useEffect(() => {
+  const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -431,6 +461,7 @@ export default function FieldCanvas({
     }
 
     drawGrid(ctx);
+    drawContextSegments(ctx);
     if (trajectory && trajectory.states?.length > 1) drawPath(ctx);
     waypoints.forEach((wp, i) => drawWaypoint(ctx, wp, i));
     if (trajectory && trajectory.states?.length > 1) {
@@ -445,21 +476,28 @@ export default function FieldCanvas({
         if (showVelocity) drawRobotVelocityOverlay(ctx, pose);
       }
     }
-  });
+  }, [waypoints, selectedIndex, trajectory, showVelocity, simProgress, isSimulating, contextSegments, subsystemTriggers, rotationTargets, robotSettings, fieldImage, zoom, activeField, bounds, toPixel]);
+
+  useEffect(() => { draw(); });
 
   // ── Resize ────────────────────────────────────────────────────────────────
+  // Setting canvas.width/height clears the canvas bitmap immediately, outside of React's
+  // render cycle — without an explicit redraw here the field image can go blank after any
+  // layout change (e.g. a side panel opening/closing) until some unrelated re-render happens.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ro = new ResizeObserver(() => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
+      draw();
     });
     ro.observe(canvas);
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
+    draw();
     return () => ro.disconnect();
-  }, []);
+  }, [draw]);
 
   // ── Hit tests ─────────────────────────────────────────────────────────────
 
@@ -725,31 +763,18 @@ export default function FieldCanvas({
     if (hit >= 0) onDeleteWaypoint(hit);
   }, [hitWaypoint, onDeleteWaypoint]);
 
+  // Panning has been removed — the field stays centered at all times. Zoom (FRC only,
+  // via ctrl/cmd + wheel) is kept, anchored to the field center rather than the cursor.
   const handleWheel = useCallback((e) => {
     e.preventDefault();
+    if (isFtc) return;
     if (e.ctrlKey || e.metaKey) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
       setZoom(z => {
         const factor = e.deltaY > 0 ? 0.92 : 1.08;
-        const newZoom = Math.max(0.5, Math.min(5, z * factor));
-        const scaleDelta = newZoom - z;
-        const { w, h } = getCanvasSize();
-        const dx = (mx - w / 2 - panRef.current.x) * (scaleDelta / z);
-        const dy = (my - h / 2 - panRef.current.y) * (scaleDelta / z);
-        const newPan = clampPan({ x: panRef.current.x - dx, y: panRef.current.y - dy }, newZoom, w, h);
-        panRef.current = newPan;
-        setPan(newPan);
-        return newZoom;
+        return Math.max(0.5, Math.min(5, z * factor));
       });
-    } else {
-      const { w, h } = getCanvasSize();
-      const newPan = clampPan({ x: panRef.current.x - e.deltaX, y: panRef.current.y - e.deltaY }, zoom, w, h);
-      panRef.current = newPan;
-      setPan(newPan);
     }
-  }, [zoom]);
+  }, [isFtc, setZoom]);
 
   const cursor = tool === 'add' ? 'crosshair' : dragging?.type === 'rotation' ? 'grabbing' : dragging ? 'grabbing' : 'default';
 

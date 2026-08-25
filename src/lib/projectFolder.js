@@ -148,6 +148,141 @@ export async function saveVariantToProject(variantObj, previousName) {
   await syncFtcOpmodeAuto(variantObj, previousName);
 }
 
+// ─── Point library (shared, named field positions) ────────────────────────
+
+export async function savePointToProject(pointObj, previousName) {
+  if (!_dirHandle) return;
+  if (!pointObj.name || pointObj.name.trim() === '') return;
+  const dir = await getOrCreateSubdir('points');
+  const safeName = safeNameFromString(pointObj.name);
+  if (previousName && previousName !== pointObj.name) {
+    const oldSafe = safeNameFromString(previousName);
+    await deleteFileIfExists(dir, `${oldSafe}.point.json`);
+  }
+  const fh = await dir.getFileHandle(`${safeName}.point.json`, { create: true });
+  const writable = await fh.createWritable();
+  await writable.write(JSON.stringify(pointObj, null, 2));
+  await writable.close();
+}
+
+export async function loadPointsFromProject() {
+  if (!_dirHandle) return null;
+  try {
+    const dir = await _dirHandle.getDirectoryHandle('points', { create: false });
+    const points = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.point.json')) {
+        const fh = await dir.getFileHandle(entry.name);
+        const file = await fh.getFile();
+        const text = await file.text();
+        points.push(JSON.parse(text));
+      }
+    }
+    return points.length > 0 ? points : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deletePointFromProject(name) {
+  if (!_dirHandle) return;
+  try {
+    const dir = await getSubdirIfExists('points');
+    if (!dir) return;
+    const safeName = safeNameFromString(name);
+    if (!safeName) return;
+    await deleteFileIfExists(dir, `${safeName}.point.json`);
+  } catch (_) { /* ignore */ }
+}
+
+// ─── Auto (unified, directly-runnable sequence — replaces Skeleton+Variant) ─
+
+export async function saveAutoToProject(autoObj, previousName) {
+  if (!_dirHandle) return;
+  if (!autoObj.name || autoObj.name.trim() === '') return;
+  const dir = await getOrCreateSubdir('autos');
+  const safeName = safeNameFromString(autoObj.name);
+  if (previousName && previousName !== autoObj.name) {
+    const oldSafe = safeNameFromString(previousName);
+    await deleteFileIfExists(dir, `${oldSafe}.auto.json`);
+  }
+  const fh = await dir.getFileHandle(`${safeName}.auto.json`, { create: true });
+  const writable = await fh.createWritable();
+  await writable.write(JSON.stringify(autoObj, null, 2));
+  await writable.close();
+  await syncFtcOpmodeAuto(autoObj, previousName);
+}
+
+export async function loadAutosFromProject() {
+  if (!_dirHandle) return null;
+  try {
+    const dir = await _dirHandle.getDirectoryHandle('autos', { create: false });
+    const autos = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.auto.json')) {
+        const fh = await dir.getFileHandle(entry.name);
+        const file = await fh.getFile();
+        const text = await file.text();
+        autos.push(JSON.parse(text));
+      }
+    }
+    return autos.length > 0 ? autos : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteAutoFromProject(name) {
+  if (!_dirHandle) return;
+  try {
+    const dir = await getSubdirIfExists('autos');
+    if (!dir) return;
+    const safeName = safeNameFromString(name);
+    if (!safeName) return;
+    await deleteFileIfExists(dir, `${safeName}.auto.json`);
+    await deleteFtcOpmodeAuto(name);
+  } catch (_) { /* ignore */ }
+}
+
+/** Flatten a legacy (SkeletonAuto commands + ChildAuto overrides) pair into a unified Auto sequence. */
+function migrateSkeletonVariantToSequence(skeleton, variant) {
+  const overrideMap = Object.fromEntries((variant.commandOverrides ?? []).map(o => [o.cmdId, o]));
+  return (skeleton?.commands ?? []).map(cmd => {
+    const override = overrideMap[cmd.id] ?? {};
+    const base = { id: cmd.id, type: cmd.type, skip: override.skip ?? false };
+    if (cmd.type === 'path') return { ...base, pathId: override.pathId ?? cmd.pathId ?? null };
+    if (cmd.type === 'wait') return { ...base, duration: override.waitDuration ?? cmd.defaultWait ?? 0 };
+    if (cmd.type === 'subsystem') return { ...base, subsystemName: cmd.subsystemName, commandName: cmd.commandName };
+    if (cmd.type === 'parallel') return { ...base, parallelSubs: cmd.parallelSubs ?? [] };
+    return base;
+  });
+}
+
+/**
+ * One-time lazy migration: legacy Skeleton+Variant pairs are merged into unified Autos the
+ * first time a project with old-format data is opened. Original skeleton/variant files are
+ * left on disk untouched (no longer read by the app) rather than deleted.
+ */
+export async function migrateLegacyAutosIfNeeded() {
+  if (!_dirHandle) return;
+  const skeletons = await loadSkeletonsFromProject();
+  const variants = await loadVariantsFromProject();
+  if (!skeletons?.length && !variants?.length) return;
+
+  const existingAutos = (await loadAutosFromProject()) ?? [];
+  const existingNames = new Set(existingAutos.map(a => safeNameFromString(a.name)));
+
+  for (const variant of (variants ?? [])) {
+    const safeName = safeNameFromString(variant.name);
+    if (existingNames.has(safeName)) continue;
+    const skeleton = (skeletons ?? []).find(s =>
+      s.id === variant.skeletonId || safeNameFromString(s.name) === safeNameFromString(variant.skeletonId));
+    const sequence = migrateSkeletonVariantToSequence(skeleton, variant);
+    await saveAutoToProject({ id: safeName, name: variant.name, sequence }, null);
+    existingNames.add(safeName);
+  }
+}
+
 export async function saveSettingsToProject(settingsObj) {
   if (!_dirHandle) return;
   const fh = await _dirHandle.getFileHandle('robot_settings.json', { create: true });
@@ -287,6 +422,7 @@ export async function initializeProjectFolder(projectType = 'frc') {
       selectedFieldId: getDefaultFieldId(league),
     });
   }
+  await migrateLegacyAutosIfNeeded();
   if (league === 'ftc') {
     await syncAllFtcOpmodeAutos();
   }

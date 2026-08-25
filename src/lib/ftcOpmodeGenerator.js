@@ -1,4 +1,4 @@
-import { getProjectDir, loadAppSettingsFromProject, loadVariantsFromProject, safeNameFromString } from './projectFolder.js';
+import { getProjectDir, loadAppSettingsFromProject, loadAutosFromProject, safeNameFromString } from './projectFolder.js';
 
 const JAVA_PACKAGE = 'org.firstinspires.ftc.teamcode.brainstemPilotAuto.opmodeAutos';
 const OPMODE_DIR = 'opmodeAutos';
@@ -114,39 +114,39 @@ async function isGeneratedOpmodeFile(dir, filename) {
   }
 }
 
-/** Create or update one FTC OpMode Java file for a variant. */
-export async function syncFtcOpmodeAuto(variantObj, previousName = null) {
+/** Create or update one FTC OpMode Java file for an Auto. */
+export async function syncFtcOpmodeAuto(autoObj, previousName = null) {
   if (!(await isFtcProject())) return;
-  if (!variantObj?.name?.trim()) return;
+  if (!autoObj?.name?.trim()) return;
 
-  if (previousName && previousName.trim() && previousName.trim() !== variantObj.name.trim()) {
+  if (previousName && previousName.trim() && previousName.trim() !== autoObj.name.trim()) {
     await deleteOpmodeJavaFile(previousName.trim());
   }
 
-  await writeOpmodeJavaFile(variantObj.name.trim());
+  await writeOpmodeJavaFile(autoObj.name.trim());
 }
 
-/** Remove the FTC OpMode Java file for a deleted variant. */
+/** Remove the FTC OpMode Java file for a deleted Auto. */
 export async function deleteFtcOpmodeAuto(displayName) {
   if (!(await isFtcProject())) return;
   if (!displayName?.trim()) return;
   await deleteOpmodeJavaFile(displayName.trim());
 }
 
-/** Regenerate all FTC OpMode files from variants/ and remove stale generated files. */
+/** Regenerate all FTC OpMode files from autos/ and remove stale generated files. */
 export async function syncAllFtcOpmodeAutos() {
   if (!(await isFtcProject())) return;
 
-  const variants = (await loadVariantsFromProject()) ?? [];
+  const autos = (await loadAutosFromProject()) ?? [];
   const expectedFiles = new Set(
-    variants
-      .filter(v => v?.name?.trim())
-      .map(v => ftcOpmodeJavaFilename(v.name.trim()))
+    autos
+      .filter(a => a?.name?.trim())
+      .map(a => ftcOpmodeJavaFilename(a.name.trim()))
   );
 
-  for (const variant of variants) {
-    if (variant?.name?.trim()) {
-      await writeOpmodeJavaFile(variant.name.trim());
+  for (const auto of autos) {
+    if (auto?.name?.trim()) {
+      await writeOpmodeJavaFile(auto.name.trim());
     }
   }
 

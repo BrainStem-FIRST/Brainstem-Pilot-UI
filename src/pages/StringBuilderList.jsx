@@ -1,11 +1,81 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { readEntity, createEntity, updateEntity, deleteEntity, safeNameFromString } from '../lib/dataService';
-import { Plus, ChevronLeft, Trash2, Layers, Play, Pencil, Check, X, MonitorPlay, Copy } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, MonitorPlay, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { buildAutoChain, generateTrajectory } from '../lib/trajectoryMath';
+import { normalizeSavedPath } from '../lib/pathWaypoints';
+import { computeFieldLayout, drawFieldImage, fieldToPixels } from '../lib/fieldCoordinates';
+import { useFieldConfig } from '../context/FieldConfigContext';
+import { useLeague } from '../context/LeagueContext';
+import { getMotionUnitsForLeague } from '../lib/motionUnits';
 
 function safeId(name) {
   return safeNameFromString(name);
+}
+
+/** Small field-diagram thumbnail with this Auto's chained path(s) overlaid, like the old path picker. */
+function AutoPreview({ sequence, paths, points, constraints }) {
+  const { activeField, imageUrl } = useFieldConfig();
+  const canvasRef = useRef(null);
+  const [fieldImage, setFieldImage] = useState(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = imageUrl;
+    img.onload = () => setFieldImage(img);
+  }, [imageUrl]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+
+    const zoom = 1;
+    const pan = { x: 0, y: 0 };
+    const layout = computeFieldLayout(W, H, pan, zoom, activeField);
+    if (fieldImage) {
+      drawFieldImage(ctx, fieldImage, layout);
+    }
+
+    const toPixel = (x, y) => fieldToPixels(x, y, W, H, pan, zoom, activeField);
+    const resolved = buildAutoChain(sequence ?? [], { paths, points });
+
+    resolved.forEach(slot => {
+      if (!slot.chainedWaypoints || slot.chainedWaypoints.length < 2) return;
+      const traj = generateTrajectory(slot.chainedWaypoints, constraints, []);
+      if (!traj?.states?.length) return;
+      ctx.beginPath();
+      const first = toPixel(traj.states[0].x, traj.states[0].y);
+      ctx.moveTo(first.px, first.py);
+      for (let i = 1; i < traj.states.length; i++) {
+        const { px, py } = toPixel(traj.states[i].x, traj.states[i].y);
+        ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = slot.type === 'point' ? 'rgba(34,211,238,0.9)' : 'rgba(50,200,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(50,200,255,0.5)';
+      ctx.shadowBlur = 5;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      [slot.chainedWaypoints[0], slot.chainedWaypoints[slot.chainedWaypoints.length - 1]].forEach((wp, i) => {
+        const { px, py } = toPixel(wp.x, wp.y);
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fillStyle = i === 0 ? '#22dd66' : '#ff4444';
+        ctx.fill();
+      });
+    });
+  }, [sequence, paths, points, fieldImage, activeField, constraints]);
+
+  return <canvas ref={canvasRef} width={280} height={130} className="w-full h-full block" />;
 }
 
 function RenameInline({ name, onSave, onCancel }) {
@@ -26,97 +96,71 @@ function RenameInline({ name, onSave, onCancel }) {
 
 export default function StringBuilderList() {
   const navigate = useNavigate();
-  const [skeletons, setSkeletons] = useState([]);
-  const [children, setChildren] = useState([]);
+  const { projectType } = useLeague();
+  const motionUnits = getMotionUnitsForLeague(projectType);
+  const [autos, setAutos] = useState([]);
+  const [allPaths, setAllPaths] = useState([]);
+  const [allPoints, setAllPoints] = useState([]);
   const [loading, setLoading] = useState(true);
-  const location = useLocation();
-  const defaultTab = new URLSearchParams(location.search).get('tab') === 'children' ? 'children' : 'skeletons';
-  const [tab, setTab] = useState(defaultTab);
   const [renamingId, setRenamingId] = useState(null);
 
   useEffect(() => {
     Promise.all([
-      readEntity('SkeletonAuto'),
-      readEntity('ChildAuto'),
-    ]).then(([sk, ch]) => {
-      const sorted = (arr) => Array.isArray(arr) ? arr.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)) : [];
-      setSkeletons(sorted(sk));
-      setChildren(sorted(ch));
+      readEntity('Auto'),
+      readEntity('SavedAuto'),
+      readEntity('Point'),
+    ]).then(([data, paths, points]) => {
+      const sorted = Array.isArray(data) ? data.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)) : [];
+      setAutos(sorted);
+      setAllPaths(Array.isArray(paths) ? paths.map(normalizeSavedPath) : []);
+      setAllPoints(Array.isArray(points) ? points : []);
       setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
-  const createSkeleton = async () => {
-    const name = `Auto ${skeletons.length + 1}`;
+  const createAuto = async () => {
+    const name = `Auto ${autos.length + 1}`;
     try {
-      const created = await createEntity('SkeletonAuto', { name, commands: [] });
+      const created = await createEntity('Auto', { name, sequence: [] });
       const recordId = created?.id ?? safeId(name);
-      navigate(`/skeleton-builder/${recordId}`);
+      navigate(`/auto-workspace/${recordId}`);
     } catch (err) {
-      navigate(`/skeleton-builder/gen-${Date.now()}`);
+      navigate(`/auto-workspace/gen-${Date.now()}`);
     }
   };
 
-  const deleteSkeleton = async (e, id) => {
+  const deleteAuto = async (e, id) => {
     e.stopPropagation();
-    await deleteEntity('SkeletonAuto', id);
-    setSkeletons(prev => prev.filter(s => (s._id ?? s.id) !== id));
+    await deleteEntity('Auto', id);
+    setAutos(prev => prev.filter(a => (a._id ?? a.id) !== id));
   };
 
-  const deleteChild = async (e, id) => {
-    e.stopPropagation();
-    await deleteEntity('ChildAuto', id);
-    setChildren(prev => prev.filter(c => (c._id ?? c.id) !== id));
-  };
-
-  const renameSkeleton = async (id, name) => {
-    await updateEntity('SkeletonAuto', id, { name });
+  const renameAuto = async (id, name) => {
+    await updateEntity('Auto', id, { name });
     const newId = safeId(name);
-    setSkeletons(prev => prev.map(s => (s._id ?? s.id) === id ? { ...s, name, id: newId } : s));
+    setAutos(prev => prev.map(a => (a._id ?? a.id) === id ? { ...a, name, id: newId } : a));
     setRenamingId(null);
   };
 
-  const renameChild = async (id, name) => {
-    await updateEntity('ChildAuto', id, { name });
-    const newId = safeId(name);
-    setChildren(prev => prev.map(c => (c._id ?? c.id) === id ? { ...c, name, id: newId } : c));
-    setRenamingId(null);
-  };
-
-  const uniqueCopyName = (baseName, list) => {
+  const uniqueCopyName = (baseName) => {
     let uniqueName = baseName;
     let counter = 1;
-    while (list.some(item => safeId(item.name) === safeId(uniqueName))) {
+    while (autos.some(item => safeId(item.name) === safeId(uniqueName))) {
       uniqueName = `${baseName}_${counter}`;
       counter++;
     }
     return uniqueName;
   };
 
-  const duplicateSkeleton = async (e, sk) => {
+  const duplicateAuto = async (e, auto) => {
     e.stopPropagation();
-    const name = uniqueCopyName(`${sk.name}_Copy`, skeletons);
-    const created = await createEntity('SkeletonAuto', {
+    const name = uniqueCopyName(`${auto.name}_Copy`);
+    const created = await createEntity('Auto', {
       name,
-      commands: JSON.parse(JSON.stringify(sk.commands || [])),
+      sequence: JSON.parse(JSON.stringify(auto.sequence || [])),
     });
-    setSkeletons(prev => [created, ...prev]);
+    setAutos(prev => [created, ...prev]);
   };
-
-  const duplicateChild = async (e, ch) => {
-    e.stopPropagation();
-    const name = uniqueCopyName(`${ch.name}_Copy`, children);
-    const created = await createEntity('ChildAuto', {
-      name,
-      skeletonId: ch.skeletonId,
-      commandOverrides: JSON.parse(JSON.stringify(ch.commandOverrides || [])),
-    });
-    setChildren(prev => [created, ...prev]);
-  };
-
-  const skeletonName = (id) => skeletons.find(s => (s._id ?? s.id) === id)?.name ?? 'Unknown Template';
 
   return (
     <div className="min-h-screen bg-background flex flex-col p-6 relative overflow-hidden">
@@ -136,141 +180,75 @@ export default function StringBuilderList() {
           </button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-foreground">Build an Auto</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Create skeleton templates and runnable variant autos.</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Create and edit your autonomous routines — paths, points, and subsystem commands in one workspace.</p>
           </div>
-          {tab === 'skeletons' && (
-            <button onClick={createSkeleton} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
-              <Plus className="w-4 h-4" /> New Skeleton
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-1 bg-secondary/40 rounded-xl p-1 mb-6 w-fit">
-          {[['skeletons', 'Skeleton Autos', Layers], ['children', 'Variant Autos', Play]].map(([id, label, Icon]) => (
-            <button key={id} onClick={() => setTab(id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === id ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Icon className="w-4 h-4" />{label}
-            </button>
-          ))}
+          <button onClick={createAuto} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
+            <Plus className="w-4 h-4" /> New Auto
+          </button>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
           </div>
-        ) : tab === 'skeletons' ? (
-          skeletons.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-24 gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-                <Layers className="w-8 h-8 text-violet-400/60" />
-              </div>
-              <p className="text-muted-foreground text-sm">No skeleton autos yet. Create a template to get started.</p>
-              <button onClick={createSkeleton} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
-                <Plus className="w-4 h-4" /> Create Skeleton
-              </button>
-            </motion.div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {skeletons.map((sk, i) => {
-                const sId = sk._id ?? sk.id;
-                if (!sId) return null;
-                return (
-                  <motion.div key={sId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                    onClick={() => renamingId !== sId && navigate(`/skeleton-builder/${sId}`)}
-                    className="group cursor-pointer rounded-xl bg-card border border-violet-500/20 hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10 transition-all overflow-hidden">
-                    <div className="h-1.5 bg-gradient-to-r from-violet-600 to-purple-500" />
-                    <div className="p-4">
-                      <div className="flex items-start gap-2 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                          <Layers className="w-4 h-4 text-violet-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {renamingId === sId ? (
-                            <RenameInline name={sk.name} onSave={name => renameSkeleton(sId, name)} onCancel={() => setRenamingId(null)} />
-                          ) : (
-                            <p className="text-sm font-semibold text-foreground truncate">{sk.name}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-0.5">{(sk.commands?.length ?? 0)} commands</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 font-medium">Template</span>
-                        <span className="text-[10px] text-muted-foreground">· Cannot run directly</span>
-                      </div>
-                    </div>
-                    {renamingId !== sId && (
-                      <div className="px-4 pb-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={e => duplicateSkeleton(e, sk)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Duplicate">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); setRenamingId(sId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => deleteSkeleton(e, sId)} className="p-1.5 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
+        ) : autos.length === 0 ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+              <Layers className="w-8 h-8 text-violet-400/60" />
             </div>
-          )
+            <p className="text-muted-foreground text-sm">No autos yet. Create one to get started.</p>
+            <button onClick={createAuto} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
+              <Plus className="w-4 h-4" /> Create Auto
+            </button>
+          </motion.div>
         ) : (
-          children.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-24 gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center">
-                <Play className="w-8 h-8 text-green-400/60" />
-              </div>
-              <p className="text-muted-foreground text-sm">No variant autos yet. Create a skeleton first, then generate variants from it.</p>
-            </motion.div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {children.map((ch, i) => {
-                const cId = ch._id ?? ch.id;
-                if (!cId) return null;
-                return (
-                  <motion.div key={cId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                    onClick={() => renamingId !== cId && navigate(`/child-builder/${cId}`)}
-                    className="group cursor-pointer rounded-xl bg-card border border-green-500/20 hover:border-green-500/50 hover:shadow-lg hover:shadow-green-500/10 transition-all overflow-hidden">
-                    <div className="h-1.5 bg-gradient-to-r from-green-600 to-emerald-500" />
-                    <div className="p-4">
-                      <div className="flex items-start gap-2 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-                          <Play className="w-4 h-4 text-green-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {renamingId === cId ? (
-                            <RenameInline name={ch.name} onSave={name => renameChild(cId, name)} onCancel={() => setRenamingId(null)} />
-                          ) : (
-                            <p className="text-sm font-semibold text-foreground truncate">{ch.name}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-0.5">Based on: {skeletonName(ch.skeletonId)}</p>
-                        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {autos.map((auto, i) => {
+              const aId = auto._id ?? auto.id;
+              if (!aId) return null;
+              return (
+                <motion.div key={aId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                  onClick={() => renamingId !== aId && navigate(`/auto-workspace/${aId}`)}
+                  className="group cursor-pointer rounded-xl bg-card border border-violet-500/20 hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10 transition-all overflow-hidden">
+                  <div className="relative w-full aspect-[280/130] bg-[#0d1117] border-b border-violet-500/20 overflow-hidden">
+                    <AutoPreview sequence={auto.sequence} paths={allPaths} points={allPoints} constraints={motionUnits.defaultConstraints} />
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-start gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                        <Layers className="w-4 h-4 text-violet-400" />
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Variant · Runnable</span>
+                      <div className="flex-1 min-w-0">
+                        {renamingId === aId ? (
+                          <RenameInline name={auto.name} onSave={name => renameAuto(aId, name)} onCancel={() => setRenamingId(null)} />
+                        ) : (
+                          <p className="text-sm font-semibold text-foreground truncate">{auto.name}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-0.5">{(auto.sequence?.length ?? 0)} slots</p>
+                      </div>
                     </div>
-                    {renamingId !== cId && (
-                      <div className="px-4 pb-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={e => duplicateChild(e, ch)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Duplicate">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); navigate(`/auto-simulator/${cId}`); }} className="p-1.5 rounded-md text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-all" title="Simulate">
-                          <MonitorPlay className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); setRenamingId(cId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => deleteChild(e, cId)} className="p-1.5 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
-          )
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Runnable</span>
+                  </div>
+                  {renamingId !== aId && (
+                    <div className="px-4 pb-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={e => duplicateAuto(e, auto)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Duplicate">
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); navigate(`/auto-simulator/${aId}`); }} className="p-1.5 rounded-md text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-all" title="Simulate">
+                        <MonitorPlay className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); setRenamingId(aId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={e => deleteAuto(e, aId)} className="p-1.5 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

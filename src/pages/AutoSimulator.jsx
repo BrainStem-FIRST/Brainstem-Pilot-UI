@@ -1,388 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Play, Square, RotateCcw, Zap, Clock, GitBranch, ChevronDown } from 'lucide-react';
-import { generateTrajectory, getPoseAtProgress, mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis, chainPathToPose } from '../lib/trajectoryMath';
-import { fieldToPixels, computeFieldLayout, drawFieldImage, getDefaultSimulatorView, clampPan } from '../lib/fieldCoordinates';
+import { mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis } from '../lib/trajectoryMath';
 import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
 import { getMotionUnitsForLeague } from '../lib/motionUnits';
 import { readEntity } from '../lib/dataService';
-
-// Resolve which visual bindings (subsystem names) are currently "shown" at a given simTime
-function resolveVisibleVisuals(segments, subsystemConfigs, robotSubsystems, simTime) {
-  const visibilityMap = {};
-  (robotSubsystems ?? []).forEach(sub => {
-    if (sub.visibleOnStart) visibilityMap[sub.name] = true;
-  });
-
-  let elapsed = 0;
-  for (const seg of segments) {
-    const dur = seg.duration ?? 0;
-    const segStart = elapsed;
-    const segEnd = elapsed + dur;
-
-    if (seg.type === 'subsystem' || seg.type === 'parallel') {
-      const cmdsToCheck = seg.type === 'subsystem'
-        ? [{ subsystemName: seg.subsystemName, commandName: seg.commandName }]
-        : (seg.parallelSubs ?? []).filter(s => s.type === 'subsystem');
-
-      if (segStart < simTime) {
-        cmdsToCheck.forEach(cmd => {
-          const sys = subsystemConfigs.find(s => s.name === cmd.subsystemName);
-          const cmdDef = sys?.commands?.find(c => c.name === cmd.commandName);
-          if (cmdDef?.visualBinding && cmdDef.visualBinding !== 'none') {
-            const action = cmdDef.visualAction ?? 'show';
-            visibilityMap[cmdDef.visualBinding] = action === 'show';
-          }
-        });
-      }
-    }
-
-    if (seg.type === 'path' && seg.trajectory) {
-      (seg.subsystemTriggers ?? []).forEach(trig => {
-        const trigTime = segStart + (trig.progress ?? 0) * dur;
-        if (trigTime > 0 && trigTime <= simTime) {
-          const sys = subsystemConfigs.find(s => s.name === trig.subsystemName);
-          const cmdDef = sys?.commands?.find(c => c.name === trig.commandName);
-          if (cmdDef?.visualBinding && cmdDef.visualBinding !== 'none') {
-            const action = cmdDef.visualAction ?? 'show';
-            visibilityMap[cmdDef.visualBinding] = action === 'show';
-          }
-        }
-      });
-    }
-
-    if (simTime < segEnd) break;
-    elapsed += dur;
-  }
-  return visibilityMap;
-}
-
-function drawStar(ctx, cx, cy, r, color) {
-  const spikes = 5;
-  ctx.beginPath();
-  for (let i = 0; i < spikes * 2; i++) {
-    const angle = (i * Math.PI) / spikes - Math.PI / 2;
-    const rad = i % 2 === 0 ? r : r * 0.45;
-    const x = cx + Math.cos(angle) * rad;
-    const y = cy + Math.sin(angle) * rad;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-}
-
-function SimCanvas({ segments, robotSettings, simTime, visibleVisuals, robotSubsystems, bounds, imageUrl, activeField, alliance }) {
-  const canvasRef = useRef(null);
-  const [fieldImage, setFieldImage] = useState(null);
-  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
-  const [zoom, setZoom] = useState(1.5);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const panRef = useRef({ x: 0, y: 0 });
-  const viewIsDefaultRef = useRef(false);
-  const prevAllianceRef = useRef(alliance);
-
-  const getCanvasSize = useCallback(() => {
-    const c = canvasRef.current;
-    if (!c) return { w: 0, h: 0 };
-    return { w: c.width, h: c.height };
-  }, []);
-
-  const applyDefaultView = useCallback(() => {
-    const { w, h } = getCanvasSize();
-    if (!w || !h) return;
-    const view = getDefaultSimulatorView(w, h, activeField, alliance);
-    setZoom(view.zoom);
-    panRef.current = view.pan;
-    setPan(view.pan);
-    viewIsDefaultRef.current = true;
-  }, [activeField, alliance, getCanvasSize]);
-
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = imageUrl;
-    img.onload = () => setFieldImage(img);
-  }, [imageUrl]);
-
-  const lastPoseRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0d1117';
-    ctx.fillRect(0, 0, W, H);
-
-    const layout = computeFieldLayout(W, H, pan, zoom, activeField);
-    const toPx = (x, y) => fieldToPixels(x, y, W, H, pan, zoom, activeField);
-
-    if (fieldImage) {
-      drawFieldImage(ctx, fieldImage, layout);
-    } else {
-      const { px: x0, py: y0 } = toPx(bounds.xMin, bounds.yMin);
-      const { px: x1, py: y1 } = toPx(bounds.xMax, bounds.yMax);
-      ctx.fillStyle = '#1a3a1a';
-      ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
-    }
-
-    const starColors = ['#a855f7', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
-    let elapsed = 0;
-    segments.forEach((seg, si) => {
-      if (!seg.trajectory) { elapsed += seg.duration ?? 0; return; }
-      const isActive = simTime >= elapsed && simTime < elapsed + (seg.duration ?? 0);
-      const pts = seg.trajectory.states;
-      if (!pts || pts.length === 0) return;
-      
-      ctx.beginPath();
-      const { px, py } = toPx(pts[0].x, pts[0].y);
-      ctx.moveTo(px, py);
-      for (let i = 1; i < pts.length; i++) {
-        const { px: nx, py: ny } = toPx(pts[i].x, pts[i].y);
-        ctx.lineTo(nx, ny);
-      }
-      ctx.strokeStyle = isActive ? 'rgba(86,180,100,0.95)' : 'rgba(255,255,255,0.55)';
-      ctx.lineWidth = isActive ? 4 : 2.5;
-      ctx.shadowColor = isActive ? 'rgba(86,180,100,0.8)' : 'rgba(255,255,255,0.2)';
-      ctx.shadowBlur = isActive ? 16 : 3;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      const dotColor = isActive ? '#56b464' : '#ffffff';
-      const { px: startPx, py: startPy } = toPx(pts[0].x, pts[0].y);
-      ctx.fillStyle = dotColor;
-      ctx.beginPath();
-      ctx.arc(startPx, startPy, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      const lastPt = pts[pts.length - 1];
-      const { px: endPx, py: endPy } = toPx(lastPt.x, lastPt.y);
-      ctx.fillStyle = dotColor;
-      ctx.beginPath();
-      ctx.arc(endPx, endPy, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      elapsed += seg.duration ?? 0;
-
-      (seg.subsystemTriggers ?? []).forEach((trig, ti) => {
-        const pose = getPoseAtProgress(seg.trajectory, trig.progress ?? 0);
-        if (!pose) return;
-        const { px: sx, py: sy } = toPx(pose.x, pose.y);
-        drawStar(ctx, sx, sy, 8, starColors[ti % starColors.length]);
-      });
-    });
-
-    const firstPathSeg = segments.find(s => s.trajectory);
-    if (simTime === 0) {
-      lastPoseRef.current = firstPathSeg ? getPoseAtProgress(firstPathSeg.trajectory, 0) : null;
-    } else if (lastPoseRef.current === null && firstPathSeg) {
-      lastPoseRef.current = getPoseAtProgress(firstPathSeg.trajectory, 0);
-    }
-
-    elapsed = 0;
-    let currentPose = null;
-    for (const seg of segments) {
-      const dur = seg.duration ?? 0;
-      if (simTime <= elapsed + dur) {
-        if (seg.trajectory) {
-          const progress = dur > 0 ? (simTime - elapsed) / dur : 0;
-          currentPose = getPoseAtProgress(seg.trajectory, Math.min(1, Math.max(0, progress)));
-        }
-        break;
-      }
-      if (seg.trajectory) {
-        lastPoseRef.current = getPoseAtProgress(seg.trajectory, 1);
-      }
-      elapsed += dur;
-    }
-
-    const pose = currentPose ?? lastPoseRef.current;
-
-    if (pose) {
-      const defaultRobotSize = activeField?.league === 'ftc' ? 18 : 0.76;
-      const ROBOT_W_M = robotSettings?.width ?? defaultRobotSize;
-      const ROBOT_H_M = robotSettings?.length ?? defaultRobotSize;
-      const { px, py } = toPx(pose.x, pose.y);
-      const { px: rx1 } = toPx(pose.x + ROBOT_W_M, pose.y);
-      const { py: ry1 } = toPx(pose.x, pose.y - ROBOT_H_M);
-      const rw = rx1 - px;
-      const rh = ry1 - py;
-      const scale = rw / ROBOT_W_M; 
-      const rad = (-(pose.rotation ?? pose.heading ?? 0) * Math.PI) / 180;
-
-      const activeVisuals = Object.entries(visibleVisuals ?? {}).filter(([, v]) => v).map(([k]) => k);
-
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(rad + Math.PI / 2);
-
-      (robotSubsystems ?? []).forEach(sub => {
-        if (!activeVisuals.includes(sub.name)) return;
-        const sw = (sub.width ?? 0.2) * scale;
-        const sh = (sub.length ?? 0.2) * scale;
-        const sx = (sub.offsetX ?? 0) * scale - sw / 2;
-        const sy = -(sub.offsetY ?? 0) * scale - sh / 2;
-        ctx.fillStyle = 'rgba(168,85,247,0.55)';
-        ctx.strokeStyle = 'rgba(220,160,255,1)';
-        ctx.lineWidth = 2;
-        ctx.shadowColor = '#a855f7';
-        ctx.shadowBlur = 10;
-        ctx.fillRect(sx, sy, sw, sh);
-        ctx.strokeRect(sx, sy, sw, sh);
-        ctx.shadowBlur = 0;
-      });
-
-      ctx.fillStyle = 'rgba(255,180,30,0.92)';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.fillRect(-rw / 2, -rh / 2, rw, rh);
-      ctx.strokeRect(-rw / 2, -rh / 2, rw, rh);
-      ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(0, -rh / 2, 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff'; ctx.fill();
-      ctx.restore();
-    }
-  }, [segments, simTime, visibleVisuals, robotSubsystems, robotSettings, bounds, fieldImage, activeField, canvasSize, zoom, pan]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const updateSize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      setCanvasSize({ w: canvas.offsetWidth, h: canvas.offsetHeight });
-    };
-    const ro = new ResizeObserver(updateSize);
-    ro.observe(canvas);
-    updateSize();
-    return () => ro.disconnect();
-  }, [activeField]);
-
-  const didInitialViewRef = useRef(false);
-
-  useEffect(() => {
-    if (!canvasSize.w || !canvasSize.h || didInitialViewRef.current) return;
-    applyDefaultView();
-    didInitialViewRef.current = true;
-  }, [canvasSize, applyDefaultView]);
-
-  useEffect(() => {
-    if (prevAllianceRef.current === alliance) return;
-    prevAllianceRef.current = alliance;
-    if (viewIsDefaultRef.current) applyDefaultView();
-  }, [alliance, applyDefaultView]);
-
-  const handleWheel = useCallback((e) => {
-    e.preventDefault();
-    viewIsDefaultRef.current = false;
-    const { w, h } = getCanvasSize();
-    if (!w || !h) return;
-    if (e.ctrlKey || e.metaKey) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      setZoom((z) => {
-        const factor = e.deltaY > 0 ? 0.92 : 1.08;
-        const newZoom = Math.max(0.5, Math.min(5, z * factor));
-        const scaleDelta = newZoom - z;
-        const dx = (mx - w / 2 - panRef.current.x) * (scaleDelta / z);
-        const dy = (my - h / 2 - panRef.current.y) * (scaleDelta / z);
-        const newPan = clampPan({ x: panRef.current.x - dx, y: panRef.current.y - dy }, newZoom, w, h, 0.15, activeField);
-        panRef.current = newPan;
-        setPan(newPan);
-        return newZoom;
-      });
-    } else {
-      const newPan = clampPan(
-        { x: panRef.current.x - e.deltaX, y: panRef.current.y - e.deltaY },
-        zoom,
-        w,
-        h,
-        0.15,
-        activeField,
-      );
-      panRef.current = newPan;
-      setPan(newPan);
-    }
-  }, [zoom, activeField, getCanvasSize]);
-
-  return (
-    <div className="relative w-full h-full">
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full block"
-        style={{ background: '#0d1117' }}
-        onWheel={handleWheel}
-      />
-      <button
-        type="button"
-        onClick={applyDefaultView}
-        className="absolute top-3 right-3 px-2.5 py-1 bg-card/90 border border-border text-xs text-muted-foreground hover:text-foreground rounded-lg transition-all backdrop-blur-sm"
-      >
-        Reset View
-      </button>
-    </div>
-  );
-}
-
-function buildSegments(sk, ch, paths, constraints) {
-  const overrideMap = Object.fromEntries((ch.commandOverrides ?? []).map(o => [o.cmdId, o]));
-  const segs = [];
-  let lastEndPose = null;
-  let pathCount = 0;
-
-  for (const cmd of (sk?.commands ?? [])) {
-    const override = overrideMap[cmd.id] ?? {};
-    if (override.skip) continue;
-    if (cmd.type === 'path') {
-      const pathId = override.pathId ?? cmd.pathId;
-      const path = paths.find(p => p.id === pathId);
-      if (path && (path.waypoints?.length ?? 0) >= 2) {
-        let waypoints = path.waypoints;
-        if (pathCount > 0 && lastEndPose) {
-          waypoints = chainPathToPose(path.waypoints, lastEndPose);
-        }
-        const traj = generateTrajectory(waypoints, constraints, path.rotationTargets ?? []);
-        if (traj) {
-          lastEndPose = getPoseAtProgress(traj, 1);
-          pathCount += 1;
-          segs.push({
-            cmdId: cmd.id,
-            type: 'path',
-            label: cmd.label || path.name,
-            trajectory: traj,
-            duration: traj.totalTime,
-            subsystemTriggers: path.subsystemTriggers ?? [],
-            startSide: path.startSide === 'L' ? 'L' : 'R',
-          });
-        }
-      }
-    } else if (cmd.type === 'wait') {
-      const dur = override.waitDuration ?? cmd.defaultWait ?? 0;
-      segs.push({ cmdId: cmd.id, type: 'wait', label: cmd.label || 'Wait', duration: dur });
-    } else if (cmd.type === 'subsystem') {
-      segs.push({ cmdId: cmd.id, type: 'subsystem', label: cmd.label || cmd.subsystemName, subsystemName: cmd.subsystemName, commandName: cmd.commandName, duration: 0.02 });
-    } else if (cmd.type === 'parallel') {
-      const maxDur = Math.max(0.02, ...(cmd.parallelSubs ?? []).map(s => s.type === 'wait' ? (s.defaultWait ?? 0) : 0.02));
-      segs.push({ cmdId: cmd.id, type: 'parallel', label: cmd.label || 'Parallel', duration: maxDur, parallelSubs: cmd.parallelSubs ?? [] });
-    }
-  }
-  return segs;
-}
-
-function wrapAngle(degrees) {
-  let angle = degrees;
-  while (angle > 180) angle -= 360;
-  while (angle <= -180) angle += 360;
-  return angle;
-}
+import { resolveVisibleVisuals, buildSegments, wrapAngle } from '../lib/simSegments';
+import SimCanvas from '../components/autobuilder/SimCanvas';
 
 export default function AutoSimulator() {
   const navigate = useNavigate();
@@ -429,15 +54,15 @@ export default function AutoSimulator() {
 
   useEffect(() => {
     Promise.all([
-      readEntity('ChildAuto'),
+      readEntity('Auto'),
       readEntity('RobotSettings'),
-    ]).then(([children, rs]) => {
-      const childList = Array.isArray(children) ? children : [];
+    ]).then(([autos, rs]) => {
+      const autoList = Array.isArray(autos) ? autos : [];
       const rsList = Array.isArray(rs) ? rs : [];
-      setAllChildren(childList);
+      setAllChildren(autoList);
       if (rsList[0]) setRobotSettings(rsList[0]);
-      if (!urlId && childList.length > 0) {
-        setSelectedChildId(childList[0].id);
+      if (!urlId && autoList.length > 0) {
+        setSelectedChildId(autoList[0].id);
       }
     });
   }, [urlId]);
@@ -449,39 +74,34 @@ export default function AutoSimulator() {
     setSegments([]);
 
     Promise.all([
-      readEntity('ChildAuto'),
+      readEntity('Auto'),
       readEntity('RobotSettings'),
-      readEntity('SkeletonAuto'),
+      readEntity('Point'),
       readEntity('SavedAuto'),
       readEntity('SubsystemConfig'),
-    ]).then(([children, rs, skeletons, paths, scList]) => {
-      const childList = Array.isArray(children) ? children : [];
+    ]).then(([autos, rs, points, paths, scList]) => {
+      const autoList = Array.isArray(autos) ? autos : [];
       const rsList = Array.isArray(rs) ? rs : [];
-      const skList = Array.isArray(skeletons) ? skeletons : [];
+      const pointList = Array.isArray(points) ? points : [];
       const pathList = Array.isArray(paths) ? paths : [];
       const scListArray = Array.isArray(scList) ? scList : [];
 
-      const ch = childList.find(c => c.id === selectedChildId);
-      if (!ch) return;
-      setChild(ch);
-      const sk = skList.find(s => s.id === ch.skeletonId);
+      const auto = autoList.find(a => a.id === selectedChildId);
+      if (!auto) return;
+      setChild(auto);
       const rsettings = rsList[0];
       const motionDefaults = getMotionUnitsForLeague(projectType).defaultConstraints;
       const constraints = {
         maxVel: rsettings?.maxVel ?? motionDefaults.maxVel,
         maxAccel: rsettings?.maxAccel ?? motionDefaults.maxAccel,
       };
-      const segs = buildSegments(sk, ch, pathList, constraints);
+      const { segments: segs, rotationTargets: rotTargets } = buildSegments(auto, pathList, pointList, constraints);
       setSegments(segs);
-      const firstPath = segs.find(s => s.type === 'path');
-      setFieldSide(firstPath?.startSide ?? 'R');
+      const firstPositional = segs.find(s => s.type === 'path' || s.type === 'point');
+      setFieldSide(firstPositional?.startSide ?? 'R');
       setTotalTime(segs.reduce((s, seg) => s + (seg.duration ?? 0), 0));
       setSubsystemConfigs(scListArray[0]?.subsystems ?? []);
-      setRotationTargets((sk?.commands ?? []).flatMap(cmd => {
-        const pathId = (ch.commandOverrides ?? []).find(o => o.cmdId === cmd.id)?.pathId || cmd.pathId;
-        const path = pathList.find(p => p.id === pathId);
-        return path?.rotationTargets ?? [];
-      }));
+      setRotationTargets(rotTargets);
     });
   }, [selectedChildId, stop, projectType]);
 
@@ -567,8 +187,8 @@ export default function AutoSimulator() {
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-lg font-semibold text-foreground mb-2">No Variant Autos Created</p>
-            <p className="text-sm text-muted-foreground">Create a variant auto to simulate</p>
+            <p className="text-lg font-semibold text-foreground mb-2">No Autos Created</p>
+            <p className="text-sm text-muted-foreground">Build an Auto to simulate it here</p>
           </div>
         </div>
       </div>
@@ -592,7 +212,7 @@ export default function AutoSimulator() {
               onChange={e => setSelectedChildId(e.target.value)}
               className="bg-secondary/60 border border-border rounded-lg px-3 py-1 pr-7 text-sm font-semibold text-foreground outline-none focus:border-primary appearance-none cursor-pointer"
             >
-              {allChildren.length === 0 && <option value="">No variant autos</option>}
+              {allChildren.length === 0 && <option value="">No autos</option>}
               {allChildren.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -695,7 +315,7 @@ export default function AutoSimulator() {
             )}
             {segments.map((seg, i) => {
               const isActive = i === activeSegIdx;
-              const typeColors = { path: 'text-blue-400', subsystem: 'text-violet-400', wait: 'text-yellow-400', parallel: 'text-green-400' };
+              const typeColors = { path: 'text-blue-400', point: 'text-cyan-400', subsystem: 'text-violet-400', wait: 'text-yellow-400', parallel: 'text-green-400' };
               return (
                 <button key={seg.cmdId} onClick={() => seekToSegment(i)}
                   className={`w-full text-left flex flex-col gap-1 px-2.5 py-2 rounded-lg transition-all text-xs border ${isActive ? 'bg-primary/20 border-primary/40' : 'border-transparent hover:bg-secondary/50'}`}>
@@ -714,7 +334,7 @@ export default function AutoSimulator() {
                       ))}
                     </div>
                   )}
-                  {seg.type === 'path' && (seg.subsystemTriggers ?? []).length > 0 && (
+                  {(seg.type === 'path' || seg.type === 'point') && (seg.subsystemTriggers ?? []).length > 0 && (
                     <div className="ml-5 space-y-0.5">
                       {seg.subsystemTriggers.map((t, ti) => (
                         <div key={ti} className="text-[10px] text-violet-400/80 flex items-center gap-1">

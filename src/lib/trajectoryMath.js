@@ -5,8 +5,11 @@ export const FIELD_WIDTH_M = 16.541;
 export const FIELD_HEIGHT_M = 8.211;
 
 /**
- * Shift a path so its first waypoint matches a chained start pose (position + heading).
- * Used when a path follows another in an auto sequence — the stored first waypoint is ignored.
+ * Reposition only the first waypoint of a path to match a chained start pose (position +
+ * heading). Used when a path follows another slot in an auto sequence. Only the connecting
+ * waypoint moves — the rest of the path keeps its authored shape/position, so the curve
+ * simply stretches to meet the new start instead of rigidly translating (and therefore
+ * moving) every other path in the sequence.
  */
 export function chainPathToPose(waypoints, startPose) {
   if (!waypoints?.length || !startPose) return waypoints;
@@ -15,15 +18,17 @@ export function chainPathToPose(waypoints, startPose) {
   const dy = startPose.y - wp0.y;
   const startRotation = startPose.rotation ?? startPose.heading ?? wp0.rotation ?? 0;
 
-  return waypoints.map((wp, i) => ({
-    ...wp,
-    x: wp.x + dx,
-    y: wp.y + dy,
-    rotation: i === 0 ? startRotation : (wp.rotation ?? 0),
-    prevControl: wp.prevControl ? { x: wp.prevControl.x + dx, y: wp.prevControl.y + dy } : null,
-    nextControl: wp.nextControl ? { x: wp.nextControl.x + dx, y: wp.nextControl.y + dy } : null,
-    params: wp.params ?? {},
-  }));
+  return waypoints.map((wp, i) => {
+    if (i !== 0) return wp;
+    return {
+      ...wp,
+      x: startPose.x,
+      y: startPose.y,
+      rotation: startRotation,
+      nextControl: wp.nextControl ? { x: wp.nextControl.x + dx, y: wp.nextControl.y + dy } : null,
+      params: wp.params ?? {},
+    };
+  });
 }
 
 /**
@@ -556,6 +561,69 @@ function lerp(a, b, t) {
 function lerpAngle(a, b, t) {
   let diff = trueMod(b - a + 180, 360) - 180;
   return a + diff * t;
+}
+
+function matchesPathRef(path, targetId) {
+  const pId = String(path._id ?? path.id ?? '');
+  const pSafeName = (path.name ?? '').trim().replace(/[^a-zA-Z0-9_\-]/g, '_');
+  return pId === String(targetId) || pSafeName === String(targetId);
+}
+
+/**
+ * Resolve an Auto's sequence into per-slot chained waypoints.
+ * Positional slots (`path`, `point`) each start exactly where the previous positional
+ * slot ended — the very first positional slot is left at its authored/stored position.
+ * Non-positional slots (`subsystem`, `wait`, `parallel`) pass the running pose through
+ * unchanged. Returns the sequence with a `chainedWaypoints` (+ resolved `path`/`point`)
+ * field added to each slot, ready for generateTrajectory().
+ */
+export function buildAutoChain(sequence, { paths = [], points = [] } = {}) {
+  const resolved = [];
+  let currentPose = null;
+
+  for (const slot of sequence ?? []) {
+    if (slot.skip) {
+      resolved.push({ ...slot, chainedWaypoints: null });
+      continue;
+    }
+
+    if (slot.type === 'path') {
+      const path = paths.find(p => p.id === slot.pathId || matchesPathRef(p, slot.pathId));
+      if (!path || (path.waypoints?.length ?? 0) < 2) {
+        resolved.push({ ...slot, chainedWaypoints: null, path: path ?? null });
+        continue;
+      }
+      const chained = currentPose ? chainPathToPose(path.waypoints, currentPose) : path.waypoints;
+      resolved.push({ ...slot, chainedWaypoints: chained, path });
+      const endWp = chained[chained.length - 1];
+      currentPose = { x: endWp.x, y: endWp.y, rotation: endWp.rotation ?? 0 };
+      continue;
+    }
+
+    if (slot.type === 'point') {
+      const point = points.find(p => (p._id ?? p.id) === slot.pointId);
+      if (!point) {
+        resolved.push({ ...slot, chainedWaypoints: null, point: null });
+        continue;
+      }
+      const endRotation = slot.rotation ?? point.rotation ?? 0;
+      if (!currentPose) {
+        // First positional slot in the sequence: nothing to connect from yet.
+        resolved.push({ ...slot, chainedWaypoints: null, point });
+        currentPose = { x: point.x, y: point.y, rotation: endRotation };
+        continue;
+      }
+      const startWp = { x: currentPose.x, y: currentPose.y, rotation: currentPose.rotation ?? 0, prevControl: null, nextControl: null, params: {} };
+      const endWp = { x: point.x, y: point.y, rotation: endRotation, prevControl: null, nextControl: null, params: slot.params ?? {} };
+      resolved.push({ ...slot, chainedWaypoints: [startWp, endWp], point });
+      currentPose = { x: endWp.x, y: endWp.y, rotation: endWp.rotation };
+      continue;
+    }
+
+    resolved.push({ ...slot, chainedWaypoints: null });
+  }
+
+  return resolved;
 }
 
 export function getPoseAtProgress(trajectory, progress) {
