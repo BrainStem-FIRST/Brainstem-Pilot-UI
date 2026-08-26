@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, GripVertical, Route, MapPin, Zap, Clock, GitBranch,
-  X, Play, Square, RotateCcw, SkipForward,
+  X, Play, Square, RotateCcw, SkipForward, Pencil, Undo2, Redo2, Library,
 } from 'lucide-react';
 import FieldCanvas from '../components/autobuilder/FieldCanvas';
 import SimCanvas from '../components/autobuilder/SimCanvas';
@@ -16,6 +16,9 @@ import { getMotionUnitsForLeague } from '../lib/motionUnits';
 import { normalizeSavedPath } from '../lib/pathWaypoints';
 import { readEntity, updateEntity, createEntity, safeNameFromString } from '../lib/dataService';
 import { savePathToProject, savePointToProject, saveAutoToProject } from '../lib/projectFolder';
+import { seedWaypointsForNewPath } from '../lib/autoSequence';
+import { findPath, findPoint, matchesRef, persistPathsDiff, persistPointsDiff } from '../lib/library';
+import { useUndoRedo } from '../hooks/useUndoRedo';
 
 const TABS_STORAGE_KEY = 'brainstem_auto_workspace_tabs';
 
@@ -29,12 +32,13 @@ const SLOT_META = {
 
 function safeId(name) { return safeNameFromString(name); }
 
-function resolvePathRef(paths, targetId) {
-  return paths.find(p => {
-    const pId = String(p._id ?? p.id ?? '');
-    const pSafeName = (p.name ?? '').trim().replace(/[^a-zA-Z0-9_\-]/g, '_');
-    return pId === String(targetId) || pSafeName === String(targetId);
-  });
+const resolvePathRef = (paths, targetId) => findPath(paths, targetId);
+
+/** First `${prefix} N` that no existing record already claims, so we never clobber a file. */
+function nextAvailableName(prefix, records) {
+  let n = (records?.length ?? 0) + 1;
+  while ((records ?? []).some(r => safeId(r.name) === safeId(`${prefix} ${n}`))) n++;
+  return `${prefix} ${n}`;
 }
 
 function readTabs() {
@@ -341,8 +345,9 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
 export default function AutoWorkspace() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeField, bounds, imageUrl } = useFieldConfig();
-  const { projectType, isFrc } = useLeague();
+  const { projectType, isFrc, isFtc } = useLeague();
   const motionUnits = getMotionUnitsForLeague(projectType);
 
   const [tabs, setTabs] = useState([]);
@@ -375,9 +380,14 @@ export default function AutoWorkspace() {
   const [draggingSlotId, setDraggingSlotId] = useState(null);
   const dragDataRef = useRef(null);
   const autoRef = useRef(null);
+  const allPathsRef = useRef([]);
+  const allPointsRef = useRef([]);
   const saveTimer = useRef(null);
   const savedAutoNameRef = useRef(null);
   const savedPathNameRef = useRef({});
+
+  useEffect(() => { allPathsRef.current = allPaths; }, [allPaths]);
+  useEffect(() => { allPointsRef.current = allPoints; }, [allPoints]);
 
   // ── Load tabs, auto, and shared entities ─────────────────────────────────
 
@@ -416,6 +426,7 @@ export default function AutoWorkspace() {
     if (!id) return;
     setLoaded(false);
     setSelectedSlotId(null);
+    resetHistory();
     Promise.all([readEntity('Auto'), refreshShared()]).then(([autos]) => {
       const list = Array.isArray(autos) ? autos : [];
       const found = list.find(a => a.id === id) ?? list.find(a => safeId(a.name) === id);
@@ -449,13 +460,49 @@ export default function AutoWorkspace() {
     saveTimer.current = setTimeout(() => saveAuto(nextAuto), 500);
   }, [saveAuto]);
 
+  // ── Undo / redo ───────────────────────────────────────────────────────────
+  // A single history covers everything editable here — the slot sequence plus the
+  // shared path/point records, since dragging a waypoint edits a path, not the Auto.
+
+  const getSnapshot = useCallback(() => {
+    if (!autoRef.current) return null;
+    return {
+      sequence: structuredClone(autoRef.current.sequence ?? []),
+      paths: structuredClone(allPathsRef.current ?? []),
+      points: structuredClone(allPointsRef.current ?? []),
+    };
+  }, []);
+
+  const applySnapshot = useCallback((snapshot, current) => {
+    clearTimeout(saveTimer.current);
+    clearTimeout(pathSaveTimer.current);
+    clearTimeout(pointSaveTimer.current);
+
+    allPathsRef.current = snapshot.paths;
+    allPointsRef.current = snapshot.points;
+    setAllPaths(snapshot.paths);
+    setAllPoints(snapshot.points);
+
+    const nextAuto = { ...autoRef.current, sequence: snapshot.sequence };
+    autoRef.current = nextAuto;
+    setAuto(nextAuto);
+
+    saveAuto(nextAuto);
+    persistPathsDiff(current?.paths ?? [], snapshot.paths);
+    persistPointsDiff(current?.points ?? [], snapshot.points);
+  }, [saveAuto]);
+
+  const { record, beginGesture, endGesture, undo, redo, canUndo, canRedo, reset: resetHistory } =
+    useUndoRedo({ getSnapshot, applySnapshot });
+
   const updateAuto = useCallback((updates) => {
+    record();
     setAuto(prev => {
       const next = { ...prev, ...updates };
       scheduleSaveAuto(next);
       return next;
     });
-  }, [scheduleSaveAuto]);
+  }, [scheduleSaveAuto, record]);
 
   const updateSequence = useCallback((nextSequence) => updateAuto({ sequence: nextSequence }), [updateAuto]);
 
@@ -591,31 +638,66 @@ export default function AutoWorkspace() {
 
   const genSlotId = () => `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-  const addPathSlot = useCallback(async (existingPathId) => {
-    let pathId = existingPathId;
-    if (!pathId) {
-      const created = await createEntity('SavedAuto', { name: `Path ${allPaths.length + 1}`, waypoints: [], constraints: {} });
-      pathId = created.id;
-      setAllPaths(prev => [...prev, created]);
-    }
-    const slot = { id: genSlotId(), type: 'path', pathId, skip: false };
-    const nextSeq = [...(autoRef.current?.sequence ?? []), slot];
-    updateSequence(nextSeq);
-    setSelectedSlotId(slot.id);
-  }, [allPaths.length, updateSequence]);
+  /**
+   * A brand new path is pre-filled with a start/end pair that already connects to its
+   * neighbours in the sequence, so it lands as a usable segment instead of an empty slot.
+   */
+  const createSeededPath = useCallback(async (insertIndex) => {
+    const waypoints = seedWaypointsForNewPath(autoRef.current?.sequence ?? [], insertIndex, {
+      paths: allPathsRef.current,
+      points: allPointsRef.current,
+      fallbackSpan: isFtc ? 24 : 1,
+    });
+    const created = await createEntity('SavedAuto', {
+      name: nextAvailableName('Path', allPathsRef.current),
+      waypoints,
+      constraints: {},
+    });
+    const next = [...allPathsRef.current, created];
+    allPathsRef.current = next;
+    setAllPaths(next);
+    return created;
+  }, [isFtc]);
 
-  const addPointSlot = useCallback(async (existingPointId) => {
-    let pointId = existingPointId;
-    if (!pointId) {
-      const created = await createEntity('Point', { name: `Point ${allPoints.length + 1}`, x: 0, y: 0, rotation: 0 });
-      pointId = created.id;
-      setAllPoints(prev => [...prev, created]);
+  const createPoint = useCallback(async () => {
+    const created = await createEntity('Point', {
+      name: nextAvailableName('Point', allPointsRef.current),
+      x: 0, y: 0, rotation: 0,
+    });
+    const next = [...allPointsRef.current, created];
+    allPointsRef.current = next;
+    setAllPoints(next);
+    return created;
+  }, []);
+
+  /**
+   * Creating a slot touches both the shared record list and the sequence; grouping them
+   * means one undo step removes the slot *and* the record it created.
+   */
+  const asTransaction = useCallback(async (fn) => {
+    beginGesture();
+    record();
+    try {
+      return await fn();
+    } finally {
+      endGesture();
     }
-    const slot = { id: genSlotId(), type: 'point', pointId, rotation: 0, params: {}, subsystemTriggers: [], skip: false };
-    const nextSeq = [...(autoRef.current?.sequence ?? []), slot];
-    updateSequence(nextSeq);
+  }, [beginGesture, record, endGesture]);
+
+  const addPathSlot = useCallback((existingPathId) => asTransaction(async () => {
+    const seqLength = (autoRef.current?.sequence ?? []).length;
+    const pathId = existingPathId ?? (await createSeededPath(seqLength)).id;
+    const slot = { id: genSlotId(), type: 'path', pathId, skip: false };
+    updateSequence([...(autoRef.current?.sequence ?? []), slot]);
     setSelectedSlotId(slot.id);
-  }, [allPoints.length, updateSequence]);
+  }), [asTransaction, createSeededPath, updateSequence]);
+
+  const addPointSlot = useCallback((existingPointId) => asTransaction(async () => {
+    const pointId = existingPointId ?? (await createPoint()).id;
+    const slot = { id: genSlotId(), type: 'point', pointId, rotation: 0, params: {}, subsystemTriggers: [], skip: false };
+    updateSequence([...(autoRef.current?.sequence ?? []), slot]);
+    setSelectedSlotId(slot.id);
+  }), [asTransaction, createPoint, updateSequence]);
 
   const addSimpleSlot = useCallback((type) => {
     const base = { id: genSlotId(), type, skip: false };
@@ -642,26 +724,24 @@ export default function AutoWorkspace() {
     updateSequence(nextSeq);
   }, [updateSequence]);
 
-  const insertSlotAt = useCallback(async (type, atIndex) => {
+  const insertSlotAt = useCallback((type, atIndex) => asTransaction(async () => {
+    const seq = Array.from(autoRef.current?.sequence ?? []);
+    const clampedIndex = Math.max(0, Math.min(seq.length, atIndex));
     let slot;
     if (type === 'path') {
-      const created = await createEntity('SavedAuto', { name: `Path ${allPaths.length + 1}`, waypoints: [], constraints: {} });
-      setAllPaths(prev => [...prev, created]);
+      const created = await createSeededPath(clampedIndex);
       slot = { id: genSlotId(), type: 'path', pathId: created.id, skip: false };
     } else if (type === 'point') {
-      const created = await createEntity('Point', { name: `Point ${allPoints.length + 1}`, x: 0, y: 0, rotation: 0 });
-      setAllPoints(prev => [...prev, created]);
+      const created = await createPoint();
       slot = { id: genSlotId(), type: 'point', pointId: created.id, rotation: 0, params: {}, subsystemTriggers: [], skip: false };
     } else {
       const extra = type === 'wait' ? { duration: 0 } : type === 'parallel' ? { parallelSubs: [] } : { subsystemName: '', commandName: '' };
       slot = { id: genSlotId(), type, skip: false, ...extra };
     }
-    const seq = Array.from(autoRef.current?.sequence ?? []);
-    const clampedIndex = Math.max(0, Math.min(seq.length, atIndex));
     seq.splice(clampedIndex, 0, slot);
     updateSequence(seq);
     setSelectedSlotId(slot.id);
-  }, [allPaths.length, allPoints.length, updateSequence]);
+  }), [asTransaction, createSeededPath, createPoint, updateSequence]);
 
   const reorderSlot = useCallback((fromIndex, toIndex) => {
     const seq = Array.from(autoRef.current?.sequence ?? []);
@@ -738,14 +818,16 @@ export default function AutoWorkspace() {
 
   const pathSaveTimer = useRef(null);
   const updatePathRecord = useCallback((pathId, updates) => {
+    record();
     setAllPaths(prev => {
       const next = prev.map(p => (p.id === pathId || safeId(p.name) === pathId) ? { ...p, ...updates } : p);
       const updated = next.find(p => p.id === pathId || safeId(p.name) === pathId);
+      allPathsRef.current = next;
       clearTimeout(pathSaveTimer.current);
       pathSaveTimer.current = setTimeout(() => savePathRecord(updated), 400);
       return next;
     });
-  }, [savePathRecord]);
+  }, [savePathRecord, record]);
 
   const activeWaypoints = activePathRecord?.waypoints ?? [];
 
@@ -783,9 +865,11 @@ export default function AutoWorkspace() {
   const pointSaveTimer = useRef(null);
   const updateActivePoint = useCallback((updates) => {
     if (!activePoint) return;
+    record();
     setAllPoints(prev => {
       const next = prev.map(p => p.id === activePoint.id ? { ...p, ...updates } : p);
       const updated = next.find(p => p.id === activePoint.id);
+      allPointsRef.current = next;
       clearTimeout(pointSaveTimer.current);
       pointSaveTimer.current = setTimeout(async () => {
         await updateEntity('Point', updated.id, updated);
@@ -825,11 +909,13 @@ export default function AutoWorkspace() {
   const movePrevSlotEnd = useCallback((prevSlot, updates) => {
     if (!prevSlot) return;
     if (prevSlot.type === 'point') {
+      record();
       setAllPoints(prevPts => {
         const target = prevPts.find(p => p.id === prevSlot.pointId);
         if (!target) return prevPts;
         const next = prevPts.map(p => p.id === target.id ? { ...p, x: updates.x ?? p.x, y: updates.y ?? p.y } : p);
         const updated = next.find(p => p.id === target.id);
+        allPointsRef.current = next;
         clearTimeout(pointSaveTimer.current);
         pointSaveTimer.current = setTimeout(async () => {
           await updateEntity('Point', updated.id, updated);
@@ -855,7 +941,7 @@ export default function AutoWorkspace() {
       } : wp);
       updatePathRecord(prevPath.id, { waypoints: nextWps });
     }
-  }, [allPaths, updatePathRecord]);
+  }, [allPaths, updatePathRecord, record]);
 
   const onUpdatePointWaypoint = useCallback((index, updates) => {
     const pointWpIndex = pointActiveWaypoints.length - 1;
@@ -896,6 +982,25 @@ export default function AutoWorkspace() {
 
   useEffect(() => { setSelectedWaypointIndex(null); }, [selectedSlotId]);
 
+  // Deep link from the Path & Point Index: focus the slot that uses the given record.
+  useEffect(() => {
+    if (!loaded || !auto) return;
+    const pathRef = searchParams.get('path');
+    const pointRef = searchParams.get('point');
+    if (!pathRef && !pointRef) return;
+    const match = (auto.sequence ?? []).find(s =>
+      (pathRef && s.type === 'path' && matchesRef(findPath(allPaths, s.pathId) ?? { id: s.pathId }, pathRef))
+      || (pointRef && s.type === 'point' && matchesRef(findPoint(allPoints, s.pointId) ?? { id: s.pointId }, pointRef)));
+    if (match) {
+      setSelectedSlotId(match.id);
+      requestAnimationFrame(() => slotNodeRefs.current[match.id]?.scrollIntoView({ block: 'nearest' }));
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('path');
+    next.delete('point');
+    setSearchParams(next, { replace: true });
+  }, [loaded, auto, searchParams, setSearchParams]);
+
   const handleNameChange = (name) => updateAuto({ name });
 
   const handleBack = async () => {
@@ -934,6 +1039,7 @@ export default function AutoWorkspace() {
 
   const isPathSelected = selectedSlot?.type === 'path';
   const isPointSelected = selectedSlot?.type === 'point';
+  const showPathTools = isPathSelected && !!activePathRecord;
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -955,6 +1061,11 @@ export default function AutoWorkspace() {
           className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all shrink-0">
           <Plus className="w-3.5 h-3.5" />
         </button>
+        <Link to="/library" title="Path & Point Index"
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 mb-1 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all shrink-0">
+          <Library className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Path &amp; Point Index</span>
+        </Link>
       </div>
 
       {/* Name bar */}
@@ -962,17 +1073,34 @@ export default function AutoWorkspace() {
         <input value={auto.name} onChange={e => handleNameChange(e.target.value)}
           className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm font-semibold text-foreground focus:bg-secondary/50 px-1.5 py-0.5 rounded transition-colors"
           placeholder="Auto name…" />
-        {!showSimCanvas && (
+        <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
+          <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-card transition-all disabled:opacity-30 disabled:hover:bg-transparent">
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-card transition-all disabled:opacity-30 disabled:hover:bg-transparent">
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {/* Canvas tools only make sense alongside the path sidebar, i.e. with a Path slot selected. */}
+        {!showSimCanvas && showPathTools && (
           <>
             <div className="flex gap-1 bg-secondary/50 rounded-lg p-0.5">
               <button onClick={() => setTool('select')} className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${tool === 'select' ? 'bg-card text-foreground shadow' : 'text-muted-foreground'}`}>Select</button>
-              <button onClick={() => setTool('add')} className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${tool === 'add' ? 'bg-card text-foreground shadow' : 'text-muted-foreground'}`} disabled={!isPathSelected} title={isPathSelected ? 'Add waypoints' : 'Select a Path slot to add waypoints'}>Add</button>
+              <button onClick={() => setTool('add')} className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${tool === 'add' ? 'bg-card text-foreground shadow' : 'text-muted-foreground'}`} title="Add waypoints">Add</button>
             </div>
             <button onClick={() => setShowVelocity(v => !v)}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${showVelocity ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-secondary/50 border-border text-muted-foreground'}`}>
               Velocity
             </button>
           </>
+        )}
+        {showSimCanvas && (
+          <button onClick={resetSim}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 transition-all">
+            <Pencil className="w-3.5 h-3.5" /> Back to Edit
+          </button>
         )}
         {showSimCanvas && isFrc && (
           <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
@@ -1088,6 +1216,8 @@ export default function AutoWorkspace() {
                   rotationTargets={isPathSelected ? (activePathRecord?.rotationTargets ?? []) : []}
                   onUpdateRotationTargets={isPathSelected ? (rots) => updatePathRecord(activePathRecord.id, { rotationTargets: rots }) : undefined}
                   contextSegments={contextSegments}
+                  onBeginEdit={beginGesture}
+                  onEndEdit={endGesture}
                 />
                 {!selectedSlot && (
                   <div className="absolute bottom-3 left-3 px-3 py-1.5 bg-card/90 border border-border text-xs text-muted-foreground rounded-lg backdrop-blur-sm">
@@ -1138,6 +1268,8 @@ export default function AutoWorkspace() {
               onUpdateTriggers={(trigs) => updatePathRecord(activePathRecord.id, { subsystemTriggers: trigs })}
               rotationTargets={activePathRecord.rotationTargets ?? []}
               onUpdateRotationTargets={(rots) => updatePathRecord(activePathRecord.id, { rotationTargets: rots })}
+              onEditStart={beginGesture}
+              onEditEnd={endGesture}
             />
           ) : isPointSelected ? (
             <PointSlotPanel
@@ -1147,6 +1279,8 @@ export default function AutoWorkspace() {
               onUpdatePoint={updateActivePoint}
               subsystems={subsystems}
               motionUnits={motionUnits}
+              onEditStart={beginGesture}
+              onEditEnd={endGesture}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6">

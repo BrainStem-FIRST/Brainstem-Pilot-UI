@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { readEntity, createEntity, updateEntity, deleteEntity, safeNameFromString } from '../lib/dataService';
-import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, MonitorPlay, Copy } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, MonitorPlay, Copy, Library } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { buildAutoChain, generateTrajectory } from '../lib/trajectoryMath';
 import { normalizeSavedPath } from '../lib/pathWaypoints';
@@ -182,6 +182,9 @@ export default function StringBuilderList() {
             <h1 className="text-2xl font-bold text-foreground">Build an Auto</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Create and edit your autonomous routines — paths, points, and subsystem commands in one workspace.</p>
           </div>
+          <button onClick={() => navigate('/library')} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+            <Library className="w-4 h-4" /> Path &amp; Point Index
+          </button>
           <button onClick={createAuto} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
             <Plus className="w-4 h-4" /> New Auto
           </button>

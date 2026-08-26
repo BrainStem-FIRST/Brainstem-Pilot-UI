@@ -10,6 +10,7 @@ import AutoWorkspace from './pages/AutoWorkspace';
 import SubsystemConfigPage from './pages/SubsystemConfigPage';
 import AutoSimulator from './pages/AutoSimulator';
 import Documentation from './pages/Documentation';
+import LibraryIndex from './pages/LibraryIndex';
 import { FieldConfigProvider } from './context/FieldConfigContext';
 import { LeagueProvider } from './context/LeagueContext';
 
@@ -25,6 +26,7 @@ function AppRoutes() {
           <Route path="/subsystem-config" element={<SubsystemConfigPage />} />
           <Route path="/auto-simulator" element={<AutoSimulator />} />
           <Route path="/auto-simulator/:id" element={<AutoSimulator />} />
+          <Route path="/library" element={<LibraryIndex />} />
           <Route path="/docs" element={<Documentation />} />
           <Route path="*" element={<PageNotFound />} />
         </Routes>
