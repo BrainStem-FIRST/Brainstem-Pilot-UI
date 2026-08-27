@@ -1,3 +1,5 @@
+import { getMotionUnitsForLeague } from './motionUnits.js';
+
 /** Rename legacy param keys when loading or exporting saved paths. */
 export function migrateWaypointParams(params) {
   if (!params || typeof params !== 'object') return {};
@@ -26,7 +28,10 @@ export function normalizeSavedPath(pathRecord) {
     const params = migrateWaypointParams({ ...fromLegacy, ...(w.params ?? {}) });
     return { ...w, params };
   });
-  return { ...pathRecord, waypoints };
+  // A path saved as "using defaults" must keep tracking the project default rather than
+  // freezing the numbers that happened to be written out.
+  const constraints = pathRecord.constraints?.usingDefaults ? {} : pathRecord.constraints;
+  return { ...pathRecord, waypoints, constraints };
 }
 
 export function normalizeSavedPaths(paths) {
@@ -51,6 +56,23 @@ export function getPathExportMetadata(projectType) {
     headingUnit: 'deg',
     speedUnit: 'm/s',
     accelUnit: 'm/s²',
+  };
+}
+
+/**
+ * Always write real numbers. `"constraints": {}` meant "use the project defaults", but it
+ * reads as "no limits" — and the defaults were never written down anywhere in the file, so a
+ * robot-side reader could not reproduce them. `usingDefaults` records which it was, so the
+ * editor can still follow the project default while the file stands on its own.
+ */
+export function resolveConstraints(constraints, projectType) {
+  const defaults = getMotionUnitsForLeague(projectType).defaultConstraints;
+  const hasOwn = constraints?.maxVel != null && constraints?.maxAccel != null
+    && !constraints.usingDefaults;
+  return {
+    maxVel: hasOwn ? constraints.maxVel : defaults.maxVel,
+    maxAccel: hasOwn ? constraints.maxAccel : defaults.maxAccel,
+    usingDefaults: !hasOwn,
   };
 }
 

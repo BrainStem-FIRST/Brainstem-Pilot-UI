@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, GripVertical, Route, MapPin, Zap, Clock, GitBranch,
-  X, Play, Square, RotateCcw, SkipForward, Pencil, Undo2, Redo2, Library,
+  X, Play, Square, RotateCcw, SkipForward, Pencil, Undo2, Redo2, Library, AlertTriangle,
 } from 'lucide-react';
 import FieldCanvas from '../components/autobuilder/FieldCanvas';
 import SimCanvas from '../components/autobuilder/SimCanvas';
@@ -17,10 +17,18 @@ import { normalizeSavedPath } from '../lib/pathWaypoints';
 import { readEntity, updateEntity, createEntity, safeNameFromString } from '../lib/dataService';
 import { savePathToProject, savePointToProject, saveAutoToProject } from '../lib/projectFolder';
 import { seedWaypointsForNewPath } from '../lib/autoSequence';
-import { findPath, findPoint, matchesRef, persistPathsDiff, persistPointsDiff } from '../lib/library';
+import {
+  findPath, findPoint, matchesRef, persistPathsDiff, persistPointsDiff, persistAutosDiff, applyRename,
+} from '../lib/library';
+import {
+  changedEndpoints, propagateChainLinks, setRecordEndpoint, chainLinkGaps, hasLinkedStart,
+} from '../lib/chainLinks';
+import { slotIssues, issueSummary, subsystemRefIssues } from '../lib/slotIssues';
+import { readTabs, writeTabs } from '../lib/workspaceTabs';
+import { ftcClassNameClash } from '../lib/ftcOpmodeGenerator';
 import { useUndoRedo } from '../hooks/useUndoRedo';
 
-const TABS_STORAGE_KEY = 'brainstem_auto_workspace_tabs';
+
 
 const SLOT_META = {
   path: { label: 'Path', icon: Route, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
@@ -33,24 +41,30 @@ const SLOT_META = {
 function safeId(name) { return safeNameFromString(name); }
 
 const resolvePathRef = (paths, targetId) => findPath(paths, targetId);
+const EMPTY_ISSUES = [];
+
+/**
+ * A Point's heading lives on the shared record, so every slot that uses the Point turns with
+ * it. Older Autos stored a per-slot `rotation` override; drop it on load so the record wins.
+ */
+function normalizeAuto(auto) {
+  const seq = auto?.sequence ?? [];
+  if (!seq.some(s => s.type === 'point' && s.rotation != null)) return auto;
+  return {
+    ...auto,
+    sequence: seq.map(s => {
+      if (s.type !== 'point' || s.rotation == null) return s;
+      const { rotation, ...rest } = s;
+      return rest;
+    }),
+  };
+}
 
 /** First `${prefix} N` that no existing record already claims, so we never clobber a file. */
 function nextAvailableName(prefix, records) {
   let n = (records?.length ?? 0) + 1;
   while ((records ?? []).some(r => safeId(r.name) === safeId(`${prefix} ${n}`))) n++;
   return `${prefix} ${n}`;
-}
-
-function readTabs() {
-  try {
-    const raw = localStorage.getItem(TABS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
-}
-
-function writeTabs(tabs) {
-  try { localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(tabs)); } catch { /* ignore */ }
 }
 
 // Native HTML5 drag-and-drop (not a library) — each button is draggable and reports its
@@ -129,7 +143,66 @@ function AddSlotMenu({ paths, points, subsystems, onAddPath, onAddPoint, onAddSu
   );
 }
 
-function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, onToggleSkip, onUpdate, subsystems, resolvedName, registerRef, onSlotDragStart, onSlotDragEnd, isDropTarget, isDragging }) {
+/**
+ * Inline rename for the record behind a slot. Click-to-edit rather than always-an-input, so
+ * the sequence list still reads as a list; clicks are kept off the card's select handler.
+ */
+function SlotNameField({ name, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select(); } }, [editing]);
+  useEffect(() => { if (!editing) setDraft(name); }, [name, editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== name) onRename(trimmed);
+    else setDraft(name);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); setEditing(true); }}
+        title="Rename — updates every Auto that uses it"
+        className="group/name flex items-center gap-1 min-w-0 w-full text-left"
+      >
+        <span className="text-xs text-foreground truncate">{name}</span>
+        <Pencil className="w-2.5 h-2.5 text-muted-foreground/50 opacity-0 group-hover/name:opacity-100 transition-opacity shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      onClick={e => e.stopPropagation()}
+      onChange={e => setDraft(e.target.value)}
+      onKeyDown={e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') { setDraft(name); setEditing(false); }
+      }}
+      onBlur={commit}
+      className="w-full bg-secondary border border-primary/40 rounded px-1 py-0.5 text-xs text-foreground outline-none focus:border-primary"
+    />
+  );
+}
+
+/** Amber hazard marker; renders nothing when there is nothing wrong. */
+function IssueBadge({ issues, className = '' }) {
+  if (!issues || issues.length === 0) return null;
+  return (
+    <span className={`shrink-0 text-amber-400 ${className}`} title={issueSummary(issues)}>
+      <AlertTriangle className="w-3.5 h-3.5" />
+    </span>
+  );
+}
+
+function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, onToggleSkip, onUpdate, subsystems, resolvedName, registerRef, onSlotDragStart, onSlotDragEnd, isDropTarget, isDragging, issues, onRenameRecord }) {
   const meta = SLOT_META[slot.type] ?? SLOT_META.path;
   const Icon = meta.icon;
   // Subsystem/parallel/wait blocks expand inline as soon as they're selected — no separate button.
@@ -160,8 +233,19 @@ function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, on
           </div>
           <div className="flex-1 min-w-0">
             <span className={`text-[10px] font-semibold uppercase tracking-wide ${meta.color}`}>{meta.label}</span>
-            <p className="text-xs text-foreground truncate">{resolvedName ?? '—'}</p>
+            {(slot.type === 'path' || slot.type === 'point') && onRenameRecord
+              && resolvedName && resolvedName !== 'Unassigned' ? (
+              <SlotNameField name={resolvedName} onRename={name => onRenameRecord(slot, name)} />
+            ) : (
+              <p className="text-xs text-foreground truncate">{resolvedName ?? '—'}</p>
+            )}
+            {issues.length > 0 && (
+              <p className="text-[10px] text-amber-400 mt-0.5 leading-tight truncate">
+                {issues[0].message}{issues.length > 1 ? ` (+${issues.length - 1} more)` : ''}
+              </p>
+            )}
           </div>
+          <IssueBadge issues={issues} />
           {duration != null && (
             <span className={`text-[10px] font-mono shrink-0 ${isActive ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>{duration.toFixed(1)}s</span>
           )}
@@ -193,11 +277,14 @@ function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, on
               {subsystems.map(s => <option key={s.id ?? s.name} value={s.name}>{s.name}</option>)}
             </select>
             {slot.subsystemName && (
-              <select value={slot.commandName ?? ''} onChange={e => onUpdate(slot.id, { commandName: e.target.value })}
-                className="bg-secondary/50 border border-border rounded px-1.5 py-1 text-xs text-foreground outline-none focus:border-primary">
-                <option value="">— Command —</option>
-                {sysCommands.map(c => <option key={c.id ?? c.name} value={c.name}>{c.name}</option>)}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <select value={slot.commandName ?? ''} onChange={e => onUpdate(slot.id, { commandName: e.target.value })}
+                  className="flex-1 min-w-0 bg-secondary/50 border border-border rounded px-1.5 py-1 text-xs text-foreground outline-none focus:border-primary">
+                  <option value="">— Command —</option>
+                  {sysCommands.map(c => <option key={c.id ?? c.name} value={c.name}>{c.name}</option>)}
+                </select>
+                <IssueBadge issues={subsystemRefIssues(slot, subsystems)} />
+              </div>
             )}
           </div>
         )}
@@ -230,13 +317,28 @@ function ParallelEditor({ slot, onUpdate, subsystems }) {
               <button onClick={() => removeSub(i)} className="ml-auto text-destructive/50 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <select value={sub.subsystemName ?? ''} onChange={e => updateSub(i, { subsystemName: e.target.value, commandName: '' })}
-                className="flex-1 min-w-0 bg-secondary/50 border border-border rounded px-1.5 py-1 text-xs text-foreground outline-none">
-                <option value="">— Subsystem —</option>
-                {subsystems.map(s => <option key={s.id ?? s.name} value={s.name}>{s.name}</option>)}
-              </select>
-              <button onClick={() => removeSub(i)} className="text-destructive/50 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <select value={sub.subsystemName ?? ''} onChange={e => updateSub(i, { subsystemName: e.target.value, commandName: '' })}
+                  className="flex-1 min-w-0 bg-secondary/50 border border-border rounded px-1.5 py-1 text-xs text-foreground outline-none">
+                  <option value="">— Subsystem —</option>
+                  {subsystems.map(s => <option key={s.id ?? s.name} value={s.name}>{s.name}</option>)}
+                </select>
+                {!sub.subsystemName && <IssueBadge issues={subsystemRefIssues(sub, subsystems)} />}
+                <button onClick={() => removeSub(i)} className="text-destructive/50 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+              </div>
+              {sub.subsystemName && (
+                <div className="flex items-center gap-1.5">
+                  <select value={sub.commandName ?? ''} onChange={e => updateSub(i, { commandName: e.target.value })}
+                    className="flex-1 min-w-0 bg-secondary/50 border border-border rounded px-1.5 py-1 text-xs text-foreground outline-none">
+                    <option value="">— Command —</option>
+                    {(subsystems.find(s => s.name === sub.subsystemName)?.commands ?? []).map(c => (
+                      <option key={c.id ?? c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                  <IssueBadge issues={subsystemRefIssues(sub, subsystems)} />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -265,7 +367,7 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
           <MapPin className="w-3.5 h-3.5 text-cyan-400" /> Point: {point?.name ?? '—'}
         </h3>
         <p className="text-[10px] text-muted-foreground/70 mb-3">
-          This point's position is shared — moving it here moves it in every Auto that uses it.
+          This point's pose is shared — moving or turning it here changes every slot in every Auto that uses it.
         </p>
         {point && (
           <div className="grid grid-cols-2 gap-2 mb-3">
@@ -284,13 +386,13 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
           </div>
         )}
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground font-medium">Robot Rotation (this Auto only)</label>
+          <label className="text-xs text-muted-foreground font-medium">Robot Rotation (shared)</label>
           <div className="flex items-center gap-2">
-            <input type="range" min={-180} max={180} step={1} value={-(slot.rotation ?? point?.rotation ?? 0)}
+            <input type="range" min={-180} max={180} step={1} value={-(point?.rotation ?? 0)}
               onMouseDown={() => onEditStart?.()} onMouseUp={() => onEditEnd?.()}
-              onChange={e => onUpdateSlot({ rotation: -parseFloat(e.target.value) })}
+              onChange={e => onUpdatePoint({ rotation: -parseFloat(e.target.value) })}
               className="flex-1 accent-primary" />
-            <span className="text-xs font-mono text-foreground w-10 text-right">{Math.round(slot.rotation ?? point?.rotation ?? 0)}°</span>
+            <span className="text-xs font-mono text-foreground w-10 text-right">{Math.round(point?.rotation ?? 0)}°</span>
           </div>
         </div>
       </div>
@@ -316,6 +418,7 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
                   <input type="range" min={0} max={1} step={0.01} value={trig.progress ?? 0}
                     onChange={e => updateTrigger(i, { progress: parseFloat(e.target.value) })}
                     className="flex-1 accent-primary" />
+                  <IssueBadge issues={subsystemRefIssues(trig, subsystems)} />
                   <button onClick={() => removeTrigger(i)} className="text-destructive/50 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
                 </div>
                 <select value={trig.subsystemName ?? ''} onChange={e => updateTrigger(i, { subsystemName: e.target.value, commandName: '' })}
@@ -368,11 +471,18 @@ export default function AutoWorkspace() {
   const [fieldSide, setFieldSide] = useState('R');
   const [isPlaying, setIsPlaying] = useState(false);
   const [simTime, setSimTime] = useState(0);
+  // Playback takes over the field until Back to Edit (or a click on the sequence panel)
+  // explicitly returns to the editor. Stopping or scrubbing must not leak the path panel.
+  const [simPreview, setSimPreview] = useState(false);
+  const simPreviewRef = useRef(false);
+  const leavingSimRef = useRef(false);
   const simAnimRef = useRef(null);
   const simStartRef = useRef(null);
 
   const resetPanRef = useRef(null);
   const canvasContainerRef = useRef(null);
+  const viewAdjustedRef = useRef(false);
+  const fittedSizeRef = useRef({ w: 0, h: 0 });
   const slotNodeRefs = useRef({});
 
   // ── Native drag-and-drop for the sequence list (palette → sequence, and reordering) ──
@@ -382,8 +492,12 @@ export default function AutoWorkspace() {
   const autoRef = useRef(null);
   const allPathsRef = useRef([]);
   const allPointsRef = useRef([]);
+  // Every Auto in the project, read-only: joints are shared, so an edit here has to know
+  // which paths and points touch each other in sequences that aren't currently open.
+  const allAutosRef = useRef([]);
   const saveTimer = useRef(null);
   const savedAutoNameRef = useRef(null);
+  const nameClashRef = useRef(null);
   const savedPathNameRef = useRef({});
 
   useEffect(() => { allPathsRef.current = allPaths; }, [allPaths]);
@@ -426,13 +540,28 @@ export default function AutoWorkspace() {
     if (!id) return;
     setLoaded(false);
     setSelectedSlotId(null);
+    setSimPreview(false);
+    setIsPlaying(false);
+    setSimTime(0);
     resetHistory();
     Promise.all([readEntity('Auto'), refreshShared()]).then(([autos]) => {
       const list = Array.isArray(autos) ? autos : [];
       const found = list.find(a => a.id === id) ?? list.find(a => safeId(a.name) === id);
-      const record = found ?? { id, name: 'New Auto', sequence: [] };
+      const record = normalizeAuto(found ?? { id, name: 'New Auto', sequence: [] });
+      allAutosRef.current = list.map(normalizeAuto);
       setAuto(record);
-      setTabs(prev => prev.map(t => t.id === id ? { ...t, name: record.name } : t));
+      // Name *every* open tab, not just the one being opened. A tab restored from storage
+      // has only its id, and an id is a safe-name slug ("Auto_2"), so an unnamed tab used to
+      // render the slug until you clicked it — the tab strip disagreeing with the Auto.
+      setTabs(prev => {
+        const named = prev.map(t => {
+          const match = t.id === id ? record : list.find(a => a.id === t.id || safeId(a.name) === t.id);
+          return match ? { ...t, name: match.name } : t;
+        });
+        if (named.every((t, i) => t.name === prev[i].name)) return prev;
+        writeTabs(named);
+        return named;
+      });
       autoRef.current = record;
       savedAutoNameRef.current = record.name;
       setLoaded(true);
@@ -440,6 +569,22 @@ export default function AutoWorkspace() {
   }, [id, refreshShared]);
 
   useEffect(() => { autoRef.current = auto; }, [auto]);
+  useEffect(() => {
+    const current = auto;
+    if (!current?.id) return;
+    const list = allAutosRef.current ?? [];
+    allAutosRef.current = list.some(a => a.id === current.id)
+      ? list.map(a => (a.id === current.id ? current : a))
+      : [...list, current];
+  }, [auto]);
+  useEffect(() => { simPreviewRef.current = simPreview; }, [simPreview]);
+  useEffect(() => {
+    if (!auto) return;
+    const list = allAutosRef.current ?? [];
+    allAutosRef.current = list.some(a => a.id === auto.id)
+      ? list.map(a => (a.id === auto.id ? auto : a))
+      : [...list, auto];
+  }, [auto]);
 
   const defaultConstraints = useMemo(() => motionUnits.defaultConstraints, [motionUnits]);
 
@@ -448,9 +593,15 @@ export default function AutoWorkspace() {
   const saveAuto = useCallback(async (overrideAuto) => {
     const record = overrideAuto ?? autoRef.current;
     if (!record) return;
+    // An Auto's filename is its safe-name slug, so writing under a name another Auto already
+    // uses would overwrite that Auto's .auto.json (and its generated FTC OpMode). Hold the
+    // save until the name is unique again — the name bar says so while it is not.
+    if (nameClashRef.current) return;
     const previousName = savedAutoNameRef.current;
     await updateEntity('Auto', record.id, { name: record.name, sequence: record.sequence });
-    await saveAutoToProject({ id: record.id, name: record.name, sequence: record.sequence }, previousName);
+    // Write the whole record, not just the edited fields — this file is the Auto, so a
+    // partial object here would silently drop anything the workspace doesn't touch (its folder).
+    await saveAutoToProject({ ...record, name: record.name, sequence: record.sequence }, previousName);
     savedAutoNameRef.current = record.name;
   }, []);
 
@@ -523,6 +674,33 @@ export default function AutoWorkspace() {
   const selectedSlot = useMemo(() => (auto?.sequence ?? []).find(s => s.id === selectedSlotId) ?? null, [auto, selectedSlotId]);
   const selectedChainSlot = useMemo(() => chain.find(s => s.id === selectedSlotId) ?? null, [chain, selectedSlotId]);
 
+  // Reordering a sequence hands a slot new neighbours without moving any coordinates, so the
+  // joint it used to have no longer lines up; flag those rather than quietly dragging paths.
+  const linkGaps = useMemo(() => chainLinkGaps(auto?.sequence, {
+    paths: allPaths,
+    points: allPoints,
+    tolerance: isFtc ? 0.25 : 0.01,
+  }), [auto, allPaths, allPoints, isFtc]);
+
+  // Every half-filled-in slot in the sequence, so the list can flag them with a hazard badge.
+  // Warnings only — a slot you are still wiring up is a normal state, not a save blocker.
+  const issuesBySlot = useMemo(() => {
+    const map = {};
+    for (const slot of auto?.sequence ?? []) {
+      const record = slot.type === 'path' ? resolvePathRef(allPaths, slot.pathId)
+        : slot.type === 'point' ? (allPoints.find(p => p.id === slot.pointId) ?? null)
+          : null;
+      const issues = slotIssues(slot, {
+        subsystems,
+        record,
+        gap: linkGaps[slot.id],
+        lengthUnit: motionUnits.lengthUnit,
+      });
+      if (issues.length > 0) map[slot.id] = issues;
+    }
+    return map;
+  }, [auto, allPaths, allPoints, subsystems, linkGaps, motionUnits.lengthUnit]);
+
   const contextSegments = useMemo(() => {
     return chain
       .filter(s => s.id !== selectedSlotId && s.trajectory)
@@ -577,9 +755,9 @@ export default function AutoWorkspace() {
     if (simTime <= simElapsed + segments[i].duration) { activeSegIdx = i; break; }
     simElapsed += segments[i].duration;
   }
-  // Playback preview takes over the center canvas whenever it's running or scrubbed away
-  // from the start — there's no explicit "Simulate" mode toggle anymore.
-  const showSimCanvas = isPlaying || simTime > 0.0001;
+  // Playback preview takes over the center canvas until the user explicitly returns
+  // to edit — stopping or letting the routine finish must not reopen the path panel.
+  const showSimCanvas = simPreview;
   const activeSegId = showSimCanvas ? segments[activeSegIdx]?.cmdId ?? null : null;
 
   // As playback progresses, keep the active slot in view in the left sequence panel.
@@ -594,23 +772,36 @@ export default function AutoWorkspace() {
     if (simAnimRef.current) cancelAnimationFrame(simAnimRef.current);
   }, []);
 
+  const enterSimPreview = useCallback(() => {
+    setSimPreview(true);
+    setSelectedSlotId(null);
+  }, []);
+
   const playSim = useCallback(() => {
+    enterSimPreview();
     setSimTime(prev => {
       const t = prev >= totalTime - 0.01 ? 0 : prev;
       simStartRef.current = performance.now() - t * 1000;
       return t;
     });
     setIsPlaying(true);
-  }, [totalTime]);
+  }, [totalTime, enterSimPreview]);
 
   const replaySim = useCallback(() => {
     stopSim();
+    enterSimPreview();
     setSimTime(0);
     simStartRef.current = performance.now();
     setIsPlaying(true);
-  }, [stopSim]);
+  }, [stopSim, enterSimPreview]);
 
-  const resetSim = useCallback(() => { stopSim(); setSimTime(0); }, [stopSim]);
+  const resetSimClock = useCallback(() => { stopSim(); setSimTime(0); }, [stopSim]);
+
+  const exitSimPreview = useCallback(() => {
+    stopSim();
+    setSimTime(0);
+    setSimPreview(false);
+  }, [stopSim]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -625,14 +816,6 @@ export default function AutoWorkspace() {
     simAnimRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(simAnimRef.current);
   }, [isPlaying, totalTime]);
-
-  const seekToSegment = useCallback((segIndex) => {
-    stopSim();
-    let t = 0;
-    for (let i = 0; i < segIndex; i++) t += segments[i]?.duration ?? 0;
-    setSimTime(t);
-    simStartRef.current = null;
-  }, [segments, stopSim]);
 
   // ── Slot CRUD ─────────────────────────────────────────────────────────────
 
@@ -694,7 +877,7 @@ export default function AutoWorkspace() {
 
   const addPointSlot = useCallback((existingPointId) => asTransaction(async () => {
     const pointId = existingPointId ?? (await createPoint()).id;
-    const slot = { id: genSlotId(), type: 'point', pointId, rotation: 0, params: {}, subsystemTriggers: [], skip: false };
+    const slot = { id: genSlotId(), type: 'point', pointId, params: {}, subsystemTriggers: [], skip: false };
     updateSequence([...(autoRef.current?.sequence ?? []), slot]);
     setSelectedSlotId(slot.id);
   }), [asTransaction, createPoint, updateSequence]);
@@ -733,7 +916,7 @@ export default function AutoWorkspace() {
       slot = { id: genSlotId(), type: 'path', pathId: created.id, skip: false };
     } else if (type === 'point') {
       const created = await createPoint();
-      slot = { id: genSlotId(), type: 'point', pointId: created.id, rotation: 0, params: {}, subsystemTriggers: [], skip: false };
+      slot = { id: genSlotId(), type: 'point', pointId: created.id, params: {}, subsystemTriggers: [], skip: false };
     } else {
       const extra = type === 'wait' ? { duration: 0 } : type === 'parallel' ? { parallelSubs: [] } : { subsystemName: '', commandName: '' };
       slot = { id: genSlotId(), type, skip: false, ...extra };
@@ -816,44 +999,153 @@ export default function AutoWorkspace() {
     savedPathNameRef.current[record.id] = record.name;
   }, []);
 
+  // ── Chain links ───────────────────────────────────────────────────────────
+  // Records are shared between Autos, so moving one end of a path or point has to drag
+  // whatever it joins in every sequence. The edited record is saved by its own debounce; the
+  // records propagation moves are written here by diffing against the pre-propagation lists.
+
+  const linkSaveTimer = useRef(null);
+
+  const autosForLinking = useCallback(() => {
+    const current = autoRef.current;
+    const list = allAutosRef.current ?? [];
+    if (!current) return list;
+    return list.some(a => a.id === current.id)
+      ? list.map(a => (a.id === current.id ? current : a))
+      : [...list, current];
+  }, []);
+
+  const propagateLinks = useCallback((seed, basePaths, basePoints) => {
+    const linked = propagateChainLinks(
+      { paths: basePaths, points: basePoints, autos: autosForLinking() },
+      [seed],
+    );
+    if (linked.paths === basePaths && linked.points === basePoints) return;
+
+    allPathsRef.current = linked.paths;
+    allPointsRef.current = linked.points;
+    setAllPaths(linked.paths);
+    setAllPoints(linked.points);
+
+    clearTimeout(linkSaveTimer.current);
+    linkSaveTimer.current = setTimeout(() => {
+      persistPathsDiff(basePaths, linked.paths);
+      persistPointsDiff(basePoints, linked.points);
+    }, 400);
+  }, [autosForLinking]);
+
   const pathSaveTimer = useRef(null);
+  const persistOriginRef = useRef(null);
   const updatePathRecord = useCallback((pathId, updates) => {
     record();
-    setAllPaths(prev => {
-      const next = prev.map(p => (p.id === pathId || safeId(p.name) === pathId) ? { ...p, ...updates } : p);
-      const updated = next.find(p => p.id === pathId || safeId(p.name) === pathId);
-      allPathsRef.current = next;
-      clearTimeout(pathSaveTimer.current);
-      pathSaveTimer.current = setTimeout(() => savePathRecord(updated), 400);
-      return next;
-    });
-  }, [savePathRecord, record]);
+    if (!persistOriginRef.current) {
+      persistOriginRef.current = {
+        paths: structuredClone(allPathsRef.current),
+        points: structuredClone(allPointsRef.current),
+      };
+    }
+    const before = findPath(allPathsRef.current, pathId);
+    if (!before) return;
+    const after = { ...before, ...updates };
+    let nextPaths = allPathsRef.current.map(p => (p === before || (before.id != null && p.id === before.id) ? after : p));
+    let nextPoints = allPointsRef.current;
+    const ends = changedEndpoints('path', before, after);
+    if (ends.length > 0) {
+      const linked = propagateChainLinks(
+        { paths: nextPaths, points: nextPoints, autos: autosForLinking() },
+        [{ kind: 'path', id: after.id ?? after.name ?? pathId, ends }],
+      );
+      nextPaths = linked.paths;
+      nextPoints = linked.points;
+    }
+    allPathsRef.current = nextPaths;
+    allPointsRef.current = nextPoints;
+    setAllPaths(nextPaths);
+    setAllPoints(nextPoints);
+    clearTimeout(pathSaveTimer.current);
+    pathSaveTimer.current = setTimeout(() => {
+      const origin = persistOriginRef.current;
+      persistOriginRef.current = null;
+      if (!origin) return;
+      persistPathsDiff(origin.paths, allPathsRef.current);
+      persistPointsDiff(origin.points, allPointsRef.current);
+    }, 400);
+  }, [record, autosForLinking]);
 
-  const activeWaypoints = activePathRecord?.waypoints ?? [];
+  /**
+   * Rename the path or point behind a slot. A record's id *is* its safe-name slug, so a rename
+   * changes the id too, and every slot in every Auto that pointed at the old one has to be
+   * retargeted or it goes Unassigned. That is exactly what the Path & Point Index does, so
+   * this reuses the same helper rather than open-coding a second version of it.
+   */
+  const renameSlotRecord = useCallback(async (slot, newName) => {
+    const kind = slot.type === 'point' ? 'point' : 'path';
+    const siblings = kind === 'point' ? allPointsRef.current : allPathsRef.current;
+    const rec = kind === 'point'
+      ? findPoint(siblings, slot.pointId)
+      : resolvePathRef(siblings, slot.pathId);
+    if (!rec) return;
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === rec.name) return;
+    if (siblings.some(r => r.id !== rec.id && safeId(r.name) === safeId(trimmed))) {
+      window.alert(`Another ${kind} is already named "${trimmed}".`);
+      return;
+    }
+
+    const prevPaths = allPathsRef.current;
+    const prevPoints = allPointsRef.current;
+    const prevAutos = autosForLinking();
+    const renamed = applyRename(
+      { paths: prevPaths, points: prevPoints, autos: prevAutos },
+      kind, rec, trimmed,
+    );
+
+    record();
+    allPathsRef.current = renamed.paths;
+    setAllPaths(renamed.paths);
+    allPointsRef.current = renamed.points;
+    setAllPoints(renamed.points);
+    allAutosRef.current = renamed.autos;
+    const nextAuto = renamed.autos.find(a => a.id === autoRef.current?.id);
+    if (nextAuto) {
+      autoRef.current = nextAuto;
+      setAuto(nextAuto);
+    }
+    // The record's own debounce would write the *new* name to the *old* filename.
+    clearTimeout(pathSaveTimer.current);
+    clearTimeout(pointSaveTimer.current);
+    savedPathNameRef.current[safeId(trimmed)] = trimmed;
+    delete savedPathNameRef.current[rec.id];
+    await persistPathsDiff(prevPaths, renamed.paths);
+    await persistPointsDiff(prevPoints, renamed.points);
+    await persistAutosDiff(prevAutos, renamed.autos);
+  }, [record, autosForLinking]);
+
+  const nativeWaypoints = activePathRecord?.waypoints ?? [];
+  const startLinked = !!(selectedSlot?.type === 'path' && hasLinkedStart(auto?.sequence, selectedSlotId));
+
+  // Edit the stored path, not a display-only chain snap. Neighbours are written through
+  // in updatePathRecord so the next path you select is the one you just dragged.
+  const editorWaypoints = nativeWaypoints;
 
   const activeTrajectory = useMemo(() => {
-    if (!activePathRecord || activeWaypoints.length < 2) return null;
-    return generateTrajectory(activeWaypoints, activePathRecord.constraints?.maxVel ? activePathRecord.constraints : defaultConstraints, activePathRecord.rotationTargets ?? []);
-  }, [activePathRecord, activeWaypoints, defaultConstraints]);
+    if (!activePathRecord || nativeWaypoints.length < 2) return null;
+    return generateTrajectory(nativeWaypoints, activePathRecord.constraints?.maxVel ? activePathRecord.constraints : defaultConstraints, activePathRecord.rotationTargets ?? []);
+  }, [activePathRecord, nativeWaypoints, defaultConstraints]);
 
   const onAddPathWaypoint = useCallback((wp) => {
     if (!activePathRecord) return;
-    updatePathRecord(activePathRecord.id, { waypoints: [...activeWaypoints, wp] });
-    setSelectedWaypointIndex(activeWaypoints.length);
-  }, [activePathRecord, activeWaypoints, updatePathRecord]);
-
-  const onUpdatePathWaypoint = useCallback((index, updates) => {
-    if (!activePathRecord) return;
-    const next = activeWaypoints.map((w, i) => i === index ? { ...w, ...updates } : w);
-    updatePathRecord(activePathRecord.id, { waypoints: next });
-  }, [activePathRecord, activeWaypoints, updatePathRecord]);
+    updatePathRecord(activePathRecord.id, { waypoints: [...nativeWaypoints, wp] });
+    setSelectedWaypointIndex(nativeWaypoints.length);
+  }, [activePathRecord, nativeWaypoints, updatePathRecord]);
 
   const onDeletePathWaypoint = useCallback((index) => {
     if (!activePathRecord) return;
-    const next = activeWaypoints.filter((_, i) => i !== index);
+    if (startLinked && index === 0) return;
+    const next = nativeWaypoints.filter((_, i) => i !== index);
     updatePathRecord(activePathRecord.id, { waypoints: next });
     setSelectedWaypointIndex(idx => idx != null && idx >= next.length ? next.length - 1 : idx);
-  }, [activePathRecord, activeWaypoints, updatePathRecord]);
+  }, [activePathRecord, nativeWaypoints, updatePathRecord, startLinked]);
 
   // ── Active point-slot editing ─────────────────────────────────────────────
 
@@ -863,25 +1155,32 @@ export default function AutoWorkspace() {
   }, [selectedSlot, allPoints]);
 
   const pointSaveTimer = useRef(null);
+  const updatePointRecord = useCallback((pointId, updates) => {
+    const before = allPointsRef.current.find(p => p.id === pointId);
+    if (!before) return;
+    record();
+    const after = { ...before, ...updates };
+    const next = allPointsRef.current.map(p => (p.id === pointId ? after : p));
+    allPointsRef.current = next;
+    setAllPoints(next);
+    clearTimeout(pointSaveTimer.current);
+    pointSaveTimer.current = setTimeout(async () => {
+      await updateEntity('Point', after.id, after);
+      await savePointToProject(after, after.name);
+    }, 400);
+
+    const ends = changedEndpoints('point', before, after);
+    if (ends.length > 0) propagateLinks({ kind: 'point', id: after.id, ends }, allPathsRef.current, next);
+  }, [record, propagateLinks]);
+
   const updateActivePoint = useCallback((updates) => {
     if (!activePoint) return;
-    record();
-    setAllPoints(prev => {
-      const next = prev.map(p => p.id === activePoint.id ? { ...p, ...updates } : p);
-      const updated = next.find(p => p.id === activePoint.id);
-      allPointsRef.current = next;
-      clearTimeout(pointSaveTimer.current);
-      pointSaveTimer.current = setTimeout(async () => {
-        await updateEntity('Point', updated.id, updated);
-        await savePointToProject(updated, updated.name);
-      }, 400);
-      return next;
-    });
-  }, [activePoint]);
+    updatePointRecord(activePoint.id, updates);
+  }, [activePoint, updatePointRecord]);
 
   const pointActiveWaypoints = useMemo(() => {
     if (!selectedSlot || selectedSlot.type !== 'point' || !activePoint) return [];
-    const endWp = { x: activePoint.x, y: activePoint.y, rotation: selectedSlot.rotation ?? activePoint.rotation ?? 0, prevControl: null, nextControl: null, params: selectedSlot.params ?? {} };
+    const endWp = { x: activePoint.x, y: activePoint.y, rotation: activePoint.rotation ?? 0, prevControl: null, nextControl: null, params: selectedSlot.params ?? {} };
     if (selectedChainSlot?.chainedWaypoints?.length === 2) {
       return [selectedChainSlot.chainedWaypoints[0], endWp];
     }
@@ -894,7 +1193,7 @@ export default function AutoWorkspace() {
   }, [pointActiveWaypoints, defaultConstraints]);
 
   const findPrevPositionalSlot = useCallback((slotId) => {
-    const seq = auto?.sequence ?? [];
+    const seq = autoRef.current?.sequence ?? auto?.sequence ?? [];
     const idx = seq.findIndex(s => s.id === slotId);
     for (let i = idx - 1; i >= 0; i--) {
       const s = seq[i];
@@ -904,44 +1203,33 @@ export default function AutoWorkspace() {
     return null;
   }, [auto]);
 
-  // Moves only the previous slot's end pose to match — it does not translate any other
-  // path/point, it just stretches the connecting segment to the new position.
+  // Moves only the previous slot's end pose to match — used by a point's virtual start marker.
   const movePrevSlotEnd = useCallback((prevSlot, updates) => {
     if (!prevSlot) return;
     if (prevSlot.type === 'point') {
-      record();
-      setAllPoints(prevPts => {
-        const target = prevPts.find(p => p.id === prevSlot.pointId);
-        if (!target) return prevPts;
-        const next = prevPts.map(p => p.id === target.id ? { ...p, x: updates.x ?? p.x, y: updates.y ?? p.y } : p);
-        const updated = next.find(p => p.id === target.id);
-        allPointsRef.current = next;
-        clearTimeout(pointSaveTimer.current);
-        pointSaveTimer.current = setTimeout(async () => {
-          await updateEntity('Point', updated.id, updated);
-          await savePointToProject(updated, updated.name);
-        }, 400);
-        return next;
-      });
+      const target = allPointsRef.current.find(p => p.id === prevSlot.pointId);
+      if (!target) return;
+      updatePointRecord(target.id, { x: updates.x ?? target.x, y: updates.y ?? target.y });
       return;
     }
     if (prevSlot.type === 'path') {
-      const prevPath = resolvePathRef(allPaths, prevSlot.pathId);
+      const prevPath = resolvePathRef(allPathsRef.current, prevSlot.pathId);
       if (!prevPath?.waypoints?.length) return;
-      const wps = prevPath.waypoints;
-      const lastIdx = wps.length - 1;
-      const last = wps[lastIdx];
-      const dx = (updates.x ?? last.x) - last.x;
-      const dy = (updates.y ?? last.y) - last.y;
-      const nextWps = wps.map((wp, i) => i === lastIdx ? {
-        ...wp,
-        x: updates.x ?? wp.x,
-        y: updates.y ?? wp.y,
-        prevControl: wp.prevControl ? { x: wp.prevControl.x + dx, y: wp.prevControl.y + dy } : null,
-      } : wp);
-      updatePathRecord(prevPath.id, { waypoints: nextWps });
+      const last = prevPath.waypoints[prevPath.waypoints.length - 1];
+      const moved = setRecordEndpoint('path', prevPath, 'end', {
+        x: updates.x ?? last.x,
+        y: updates.y ?? last.y,
+      });
+      if (moved !== prevPath) updatePathRecord(prevPath.id, { waypoints: moved.waypoints });
     }
-  }, [allPaths, updatePathRecord, record]);
+  }, [updatePathRecord, updatePointRecord]);
+
+  const onUpdatePathWaypoint = useCallback((index, updates) => {
+    if (!activePathRecord) return;
+    const source = allPathsRef.current.find(p => p.id === activePathRecord.id)?.waypoints ?? nativeWaypoints;
+    const next = source.map((w, i) => (i === index ? { ...w, ...updates } : w));
+    updatePathRecord(activePathRecord.id, { waypoints: next });
+  }, [activePathRecord, nativeWaypoints, updatePathRecord]);
 
   const onUpdatePointWaypoint = useCallback((index, updates) => {
     const pointWpIndex = pointActiveWaypoints.length - 1;
@@ -949,7 +1237,7 @@ export default function AutoWorkspace() {
       if (updates.x != null || updates.y != null) {
         updateActivePoint({ x: updates.x ?? activePoint.x, y: updates.y ?? activePoint.y });
       }
-      if (updates.rotation != null) updateSlot(selectedSlotId, { rotation: updates.rotation });
+      if (updates.rotation != null) updateActivePoint({ rotation: updates.rotation });
       return;
     }
     // Dragging the (virtual, chained) start marker moves the previous slot's end pose —
@@ -957,7 +1245,7 @@ export default function AutoWorkspace() {
     if (index === 0 && (updates.x != null || updates.y != null)) {
       movePrevSlotEnd(findPrevPositionalSlot(selectedSlotId), updates);
     }
-  }, [pointActiveWaypoints.length, activePoint, updateActivePoint, updateSlot, selectedSlotId, findPrevPositionalSlot, movePrevSlotEnd]);
+  }, [pointActiveWaypoints.length, activePoint, updateActivePoint, selectedSlotId, findPrevPositionalSlot, movePrevSlotEnd]);
 
   // ── View helpers ───────────────────────────────────────────────────────────
 
@@ -965,6 +1253,8 @@ export default function AutoWorkspace() {
     const el = canvasContainerRef.current;
     if (!el) return;
     const { zoom: z, pan } = getDefaultPathEditorView(el.offsetWidth, el.offsetHeight, activeField);
+    viewAdjustedRef.current = false;
+    fittedSizeRef.current = { w: el.offsetWidth, h: el.offsetHeight };
     setZoom(z);
     resetPanRef.current?.(pan);
   }, [activeField]);
@@ -974,10 +1264,39 @@ export default function AutoWorkspace() {
     requestAnimationFrame(() => applyInitialView());
   }, [applyInitialView]);
 
+  // Zooming is the signal that the view is *yours* — after that a window resize leaves it
+  // alone, so resizing never yanks you out of a waypoint you were lining up. Reset View
+  // hands the fit back.
+  const onZoomChange = useCallback((next) => {
+    viewAdjustedRef.current = true;
+    setZoom(next);
+  }, []);
+
   useEffect(() => {
     if (!loaded) return;
     const raf = requestAnimationFrame(() => applyInitialView());
     return () => cancelAnimationFrame(raf);
+  }, [loaded, applyInitialView]);
+
+  // The canvas only resized its own bitmap on a layout change; zoom and pan kept the values
+  // fitted to the *old* size, so the field drifted off-centre and clipped after any window
+  // resize. Re-fit whenever the box actually changes size.
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el || !loaded) return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      const { w, h } = fittedSizeRef.current;
+      if (el.offsetWidth === w && el.offsetHeight === h) return;
+      if (viewAdjustedRef.current) {
+        fittedSizeRef.current = { w: el.offsetWidth, h: el.offsetHeight };
+        return;
+      }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => applyInitialView());
+    });
+    ro.observe(el);
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, [loaded, applyInitialView]);
 
   useEffect(() => { setSelectedWaypointIndex(null); }, [selectedSlotId]);
@@ -1037,6 +1356,17 @@ export default function AutoWorkspace() {
     );
   }
 
+  // Checked on every keystroke but reported inline rather than as a dialog — you are mid-word
+  // most of the time, and an alert per character would be unusable.
+  const typedName = auto.name ?? '';
+  const slugClash = (allAutosRef.current ?? []).find(a =>
+    a.id !== auto.id && safeId(a.name) === safeId(typedName));
+  // FTC strips punctuation to build the OpMode class name, so two Autos with different
+  // filenames can still land on one .java file. Only one of them would be selectable.
+  const classClash = isFtc ? ftcClassNameClash(typedName, allAutosRef.current ?? [], auto.id) : null;
+  const nameClash = slugClash ?? classClash;
+  nameClashRef.current = nameClash ?? null;
+
   const isPathSelected = selectedSlot?.type === 'path';
   const isPointSelected = selectedSlot?.type === 'point';
   const showPathTools = isPathSelected && !!activePathRecord;
@@ -1070,9 +1400,19 @@ export default function AutoWorkspace() {
 
       {/* Name bar */}
       <div className="flex items-center gap-3 px-4 py-2 bg-card border-b border-border shrink-0 flex-wrap gap-y-1.5">
-        <input value={auto.name} onChange={e => handleNameChange(e.target.value)}
-          className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm font-semibold text-foreground focus:bg-secondary/50 px-1.5 py-0.5 rounded transition-colors"
-          placeholder="Auto name…" />
+        <div className="flex-1 min-w-[120px] flex items-center gap-2">
+          <input value={auto.name} onChange={e => handleNameChange(e.target.value)}
+            className={`flex-1 min-w-[100px] bg-transparent border-none outline-none text-sm font-semibold focus:bg-secondary/50 px-1.5 py-0.5 rounded transition-colors ${nameClash ? 'text-amber-400' : 'text-foreground'}`}
+            placeholder="Auto name…" />
+          {nameClash && (
+            <span className="flex items-center gap-1 text-[10px] text-amber-400 shrink-0"
+              title={slugClash
+                ? `Another Auto is already named "${nameClash.name}". Saving is paused until this name is unique.`
+                : `This would generate the same FTC OpMode class as "${nameClash.name}" — punctuation is stripped from class names. Saving is paused.`}>
+              <AlertTriangle className="w-3.5 h-3.5" /> {slugClash ? 'Name already used' : 'Same OpMode class'} — not saving
+            </span>
+          )}
+        </div>
         <div className="flex gap-0.5 bg-secondary/50 rounded-lg p-0.5">
           <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)"
             className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-card transition-all disabled:opacity-30 disabled:hover:bg-transparent">
@@ -1097,7 +1437,7 @@ export default function AutoWorkspace() {
           </>
         )}
         {showSimCanvas && (
-          <button onClick={resetSim}
+          <button onClick={exitSimPreview}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 transition-all">
             <Pencil className="w-3.5 h-3.5" /> Back to Edit
           </button>
@@ -1117,8 +1457,25 @@ export default function AutoWorkspace() {
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left: sequence panel — always editable; highlights + auto-scrolls during playback */}
-        <div className="w-72 bg-card border-r border-border flex flex-col shrink-0 min-h-0">
+        {/* Left: sequence panel. A click during playback only returns to edit — it must
+            not also select a slot, or the path panel would populate while still in sim. */}
+        <div
+          onPointerDownCapture={() => {
+            if (!simPreviewRef.current) return;
+            leavingSimRef.current = true;
+            exitSimPreview();
+          }}
+          onPointerUpCapture={() => {
+            if (!leavingSimRef.current) return;
+            setTimeout(() => { leavingSimRef.current = false; }, 0);
+          }}
+          onClickCapture={(e) => {
+            if (!leavingSimRef.current) return;
+            e.stopPropagation();
+            e.preventDefault();
+            leavingSimRef.current = false;
+          }}
+          className="w-72 bg-card border-r border-border flex flex-col shrink-0 min-h-0">
           <div className="p-3 border-b border-border shrink-0">
             <AddSlotMenu
               paths={allPaths}
@@ -1156,18 +1513,14 @@ export default function AutoWorkspace() {
                   registerRef={(node) => { slotNodeRefs.current[slot.id] = node; }}
                   onSlotDragStart={handleSlotDragStart(slot, i)}
                   onSlotDragEnd={clearDragState}
-                  onSelect={(slotId) => {
-                    if (isPlaying) {
-                      const segIdx = segments.findIndex(seg => seg.cmdId === slotId);
-                      if (segIdx >= 0) seekToSegment(segIdx);
-                    }
-                    setSelectedSlotId(slotId);
-                  }}
+                  onSelect={setSelectedSlotId}
                   onDelete={deleteSlot}
                   onToggleSkip={toggleSkip}
                   onUpdate={updateSlot}
                   subsystems={subsystems}
                   resolvedName={resolveSlotLabel(slot)}
+                  issues={issuesBySlot[slot.id] ?? EMPTY_ISSUES}
+                  onRenameRecord={renameSlotRecord}
                 />
               </div>
             ))}
@@ -1196,7 +1549,7 @@ export default function AutoWorkspace() {
             ) : (
               <>
                 <FieldCanvas
-                  waypoints={isPathSelected ? activeWaypoints : isPointSelected ? pointActiveWaypoints : []}
+                  waypoints={isPathSelected ? editorWaypoints : isPointSelected ? pointActiveWaypoints : []}
                   selectedIndex={isPathSelected ? selectedWaypointIndex : isPointSelected ? pointActiveWaypoints.length - 1 : null}
                   tool={isPathSelected ? tool : 'select'}
                   trajectory={isPathSelected ? activeTrajectory : isPointSelected ? pointActiveTrajectory : null}
@@ -1209,7 +1562,7 @@ export default function AutoWorkspace() {
                   onSelectWaypoint={isPathSelected ? setSelectedWaypointIndex : () => {}}
                   robotSettings={robotSettings}
                   zoom={zoom}
-                  setZoom={setZoom}
+                  setZoom={onZoomChange}
                   onResetView={onResetViewCallback}
                   subsystemTriggers={isPathSelected ? (activePathRecord?.subsystemTriggers ?? []) : []}
                   subsystemConfig={subsystems}
@@ -1230,7 +1583,7 @@ export default function AutoWorkspace() {
 
           {/* Playback bar — always present at the bottom, no separate "Simulate" mode */}
           <div className="bg-card border-t border-border px-4 py-3 flex items-center gap-3 shrink-0">
-            <button onClick={resetSim} disabled={!showSimCanvas} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+            <button onClick={resetSimClock} disabled={!showSimCanvas} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed">
               <RotateCcw className="w-4 h-4" />
             </button>
             <button onClick={isPlaying ? stopSim : (simTime >= totalTime - 0.01 && totalTime > 0 ? replaySim : playSim)}
@@ -1240,7 +1593,12 @@ export default function AutoWorkspace() {
             </button>
             <input type="range" min={0} max={totalTime || 1} step={0.01} value={simTime}
               disabled={totalTime <= 0}
-              onChange={e => { stopSim(); simStartRef.current = null; setSimTime(parseFloat(e.target.value)); }}
+              onChange={e => {
+                enterSimPreview();
+                stopSim();
+                simStartRef.current = null;
+                setSimTime(parseFloat(e.target.value));
+              }}
               className="flex-1 accent-primary disabled:opacity-30" />
             <span className="text-xs font-mono text-muted-foreground w-24 text-right">
               {simTime.toFixed(2)}s / {(totalTime || 0).toFixed(2)}s
@@ -1250,13 +1608,20 @@ export default function AutoWorkspace() {
 
         {/* Right: waypoint / params panel — always visible */}
         <div className="w-72 bg-card border-l border-border overflow-y-auto shrink-0 flex flex-col">
-          {isPathSelected && activePathRecord ? (
+          {showSimCanvas ? (
+            <div className="flex-1 flex items-center justify-center p-6">
+              <p className="text-xs text-muted-foreground/60 text-center">
+                Playback mode — press Back to Edit to change paths and points.
+              </p>
+            </div>
+          ) : isPathSelected && activePathRecord ? (
             <WaypointSidebar
-              waypoints={activeWaypoints}
+              waypoints={editorWaypoints}
               selectedIndex={selectedWaypointIndex}
               onSelect={setSelectedWaypointIndex}
               onUpdate={onUpdatePathWaypoint}
               onDelete={onDeletePathWaypoint}
+              startLinked={startLinked}
               constraints={activePathRecord.constraints?.maxVel ? activePathRecord.constraints : defaultConstraints}
               setConstraints={(updater) => {
                 const prev = activePathRecord.constraints?.maxVel ? activePathRecord.constraints : defaultConstraints;

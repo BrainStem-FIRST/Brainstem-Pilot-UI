@@ -8,7 +8,7 @@ function endPoseOf(slot) {
     return { x: last.x, y: last.y, rotation: last.rotation ?? 0 };
   }
   if (slot.type === 'point' && slot.point) {
-    return { x: slot.point.x ?? 0, y: slot.point.y ?? 0, rotation: slot.rotation ?? slot.point.rotation ?? 0 };
+    return { x: slot.point.x ?? 0, y: slot.point.y ?? 0, rotation: slot.point.rotation ?? 0 };
   }
   return null;
 }
@@ -23,7 +23,7 @@ function startPoseOf(slot) {
     return { x: first.x, y: first.y, rotation: first.rotation ?? 0 };
   }
   if (slot.type === 'point' && slot.point) {
-    return { x: slot.point.x ?? 0, y: slot.point.y ?? 0, rotation: slot.rotation ?? slot.point.rotation ?? 0 };
+    return { x: slot.point.x ?? 0, y: slot.point.y ?? 0, rotation: slot.point.rotation ?? 0 };
   }
   return null;
 }

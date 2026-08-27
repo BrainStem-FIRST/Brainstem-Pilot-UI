@@ -66,6 +66,24 @@ export function ftcOpmodeJavaFilename(displayName) {
   return `${variantNameToClassName(displayName)}.java`;
 }
 
+/**
+ * Does `displayName` collide with another Auto's generated OpMode class?
+ *
+ * Class names strip every non-alphanumeric character, so "Nine Ball (123)" and
+ * "Nine Ball 123" have distinct file slugs but both become `NineBall123Auto` — one .java
+ * file, one of the two Autos silently unreachable from the Driver Station. Slug uniqueness
+ * is not enough; this is the check that matters for FTC.
+ *
+ * @param existingAutos every Auto in the project
+ * @param currentId     the Auto being renamed, so it does not clash with itself
+ * @returns the Auto it collides with, or null
+ */
+export function ftcClassNameClash(displayName, existingAutos, currentId) {
+  const target = variantNameToClassName(displayName);
+  return (existingAutos ?? []).find(a =>
+    (a.id ?? a._id) !== currentId && variantNameToClassName(a.name) === target) ?? null;
+}
+
 async function isFtcProject() {
   const settings = await loadAppSettingsFromProject();
   return settings?.projectType === 'ftc';
@@ -131,6 +149,38 @@ export async function deleteFtcOpmodeAuto(displayName) {
   if (!(await isFtcProject())) return;
   if (!displayName?.trim()) return;
   await deleteOpmodeJavaFile(displayName.trim());
+}
+
+/**
+ * Remove generated OpMode files from a project that is not FTC.
+ *
+ * `syncAllFtcOpmodeAutos` bails early when the project is not FTC, so a project that was ever
+ * opened as FTC — or that had files copied in from an FTC project — kept orphaned Java under
+ * `opmodeAutos/`. On FRC that folder sits inside `deploy/`, so the dead files get pushed to
+ * the roboRIO. Only files carrying the generated marker are touched.
+ */
+export async function purgeFtcOpmodesWhenNotFtc() {
+  if (await isFtcProject()) return;
+  const root = getProjectDir();
+  if (!root) return;
+
+  let dir;
+  try {
+    dir = await root.getDirectoryHandle(OPMODE_DIR, { create: false });
+  } catch {
+    return; // nothing to clean
+  }
+
+  let remaining = 0;
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'file' && await isGeneratedOpmodeFile(dir, entry.name)) {
+      try { await dir.removeEntry(entry.name); continue; } catch { /* ignore */ }
+    }
+    remaining += 1;
+  }
+  if (remaining === 0) {
+    try { await root.removeEntry(OPMODE_DIR, { recursive: true }); } catch { /* ignore */ }
+  }
 }
 
 /** Regenerate all FTC OpMode files from autos/ and remove stale generated files. */

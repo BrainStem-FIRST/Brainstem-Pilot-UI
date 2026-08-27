@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Navigation, MapPin, ChevronDown, ChevronUp, Zap, Plus, RotateCcw, Sparkles, PlusCircle } from 'lucide-react';
+import { Trash2, Navigation, MapPin, ChevronDown, ChevronUp, Zap, Plus, RotateCcw, Sparkles, PlusCircle, Link2, AlertTriangle } from 'lucide-react';
 import { readEntity } from '@/lib/dataService';
 import { useFieldConfig } from '../../context/FieldConfigContext';
 import { useLeague } from '../../context/LeagueContext';
 import { getMotionUnitsForLeague } from '../../lib/motionUnits';
+import { subsystemRefIssues, issueSummary } from '../../lib/slotIssues';
 
 // Angle input that allows typing a negative sign without stomping the value
 function AngleInput({ value, onChange, onEditStart, onEditEnd }) {
@@ -44,7 +45,7 @@ function AngleInput({ value, onChange, onEditStart, onEditEnd }) {
 
 const NUMERIC_INPUT_PATTERN = /^-?\d*\.?\d*$/;
 
-function NumberInput({ label, value, onChange, min, max, unit, decimals = 4, onEditStart, onEditEnd, className }) {
+function NumberInput({ label, value, onChange, min, max, unit, decimals = 4, onEditStart, onEditEnd, className, disabled = false }) {
   const format = (v) => parseFloat((v ?? 0).toFixed(decimals));
   const [text, setText] = useState(String(format(value)));
   const focused = React.useRef(false);
@@ -83,11 +84,12 @@ function NumberInput({ label, value, onChange, min, max, unit, decimals = 4, onE
           type="text"
           inputMode="decimal"
           value={text}
-          onFocus={(e) => { focused.current = true; onEditStart?.(); e.currentTarget.select(); }}
-          onChange={(e) => applyText(e.target.value)}
+          disabled={disabled}
+          onFocus={(e) => { if (disabled) return; focused.current = true; onEditStart?.(); e.currentTarget.select(); }}
+          onChange={(e) => { if (!disabled) applyText(e.target.value); }}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          className={className ?? 'flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors w-0'}
+          className={className ?? `flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors w-0 ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
         />
         {unit && <span className="text-xs text-muted-foreground shrink-0">{unit}</span>}
       </div>
@@ -239,6 +241,11 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
   const removeTrigger = (i) => { onRecordHistory?.(); onUpdate((triggers ?? []).filter((_, idx) => idx !== i)); };
   const updateTrigger = (i, updates) => onUpdate((triggers ?? []).map((t, idx) => idx === i ? { ...t, ...updates } : t));
 
+  // Rolled up onto the collapsed header too: a trigger that never fires is easy to miss
+  // when the section is folded away.
+  const incomplete = (triggers ?? []).flatMap((trig, i) =>
+    subsystemRefIssues(trig, subsystems, `Trigger ${i + 1}`));
+
   const updateProgress = (i, progress) => {
     const arcLengthM = progress * (totalLength > 0 ? totalLength : 0);
     onUpdate((triggers ?? []).map((t, idx) => idx === i ? { ...t, progress, arcLengthM } : t));
@@ -249,7 +256,14 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
       <button onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
         <span className="flex items-center gap-1.5 text-sm"><Zap className="w-3.5 h-3.5 text-violet-400" /><span>Subsystem Triggers</span></span>
-        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        <span className="ml-auto flex items-center gap-1.5">
+          {incomplete.length > 0 && (
+            <span className="text-amber-400" title={issueSummary(incomplete)}>
+              <AlertTriangle className="w-3.5 h-3.5" />
+            </span>
+          )}
+          {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </span>
       </button>
       {open &&
         <div className="space-y-2">
@@ -259,6 +273,7 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
           {(triggers ?? []).map((trig, i) => {
             const sys = subsystems.find((s) => s.name === trig.subsystemName);
             const cmds = sys?.commands ?? [];
+            const trigIssues = subsystemRefIssues(trig, subsystems);
             return (
               <div key={trig.id ?? i} className="bg-secondary/30 rounded-lg p-2 space-y-1.5 border border-violet-500/20">
                 <div className="flex items-center gap-1">
@@ -271,6 +286,11 @@ function SubsystemTriggersSection({ triggers, onUpdate, totalLength, lengthUnit 
                     onMouseDown={(e) => { e.stopPropagation(); onEditStart?.(); }}
                     onMouseUp={() => onEditEnd?.()}
                     className="flex-1 accent-primary" />
+                  {trigIssues.length > 0 && (
+                    <span className="shrink-0 text-amber-400" title={issueSummary(trigIssues)}>
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                    </span>
+                  )}
                   <button onClick={() => removeTrigger(i)} className="text-destructive/50 hover:text-destructive">
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -311,6 +331,7 @@ export default function WaypointSidebar({
   onEditStart,
   onEditEnd,
   onRecordHistory,
+  startLinked = false,
 }) {
   const selected = selectedIndex !== null ? waypoints[selectedIndex] : null;
   const { bounds, unit } = useFieldConfig();
@@ -365,7 +386,7 @@ export default function WaypointSidebar({
                     : `Waypoint ${selectedIndex}`
                 : 'No Selection'}
             </h3>
-            {selected &&
+            {selected && !(startLinked && selectedIndex === 0) &&
               <button onClick={() => onDelete(selectedIndex)} className="ml-auto text-destructive/60 hover:text-destructive transition-colors">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -373,6 +394,12 @@ export default function WaypointSidebar({
           </div>
           {selected ?
             <div className="space-y-3">
+              {startLinked && selectedIndex === 0 && (
+                <p className="text-[10px] text-muted-foreground/80 leading-snug flex items-start gap-1.5">
+                  <Link2 className="w-3 h-3 mt-0.5 shrink-0 text-primary" />
+                  This start is the previous path's end. Moving it moves that joint in every Auto.
+                </p>
+              )}
               <NumberInput label="X Position" value={selected.x} onChange={(v) => onUpdate(selectedIndex, { x: v })} min={bounds.xMin} max={bounds.xMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
               <NumberInput label="Y Position" value={selected.y} onChange={(v) => onUpdate(selectedIndex, { y: v })} min={bounds.yMin} max={bounds.yMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
               {onInsertAfter && selectedIndex < waypoints.length - 1 &&
@@ -477,6 +504,9 @@ export default function WaypointSidebar({
                       {i === 0 ? 'Start' : i === waypoints.length - 1 ? 'End' : `WP ${i}`}
                       {' '}({wp.x.toFixed(1)}, {wp.y.toFixed(1)})
                     </span>
+                    {i === 0 && startLinked && (
+                      <Link2 className="w-3 h-3 shrink-0 text-primary" title="Linked to previous path's end" />
+                    )}
                     {(i === 0 || i === waypoints.length - 1) &&
                       <span className="ml-auto font-mono text-[10px] shrink-0">{(wp.rotation ?? 0).toFixed(0)}°</span>}
                   </div>

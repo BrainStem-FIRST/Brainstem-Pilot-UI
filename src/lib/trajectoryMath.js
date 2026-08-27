@@ -6,10 +6,10 @@ export const FIELD_HEIGHT_M = 8.211;
 
 /**
  * Reposition only the first waypoint of a path to match a chained start pose (position +
- * heading). Used when a path follows another slot in an auto sequence. Only the connecting
- * waypoint moves — the rest of the path keeps its authored shape/position, so the curve
- * simply stretches to meet the new start instead of rigidly translating (and therefore
- * moving) every other path in the sequence.
+ * heading). Display/simulation fallback when stored joints have a gap (for example after
+ * a sequence reorder). Endpoint edits write the joint through via propagateChainLinks, so
+ * this is a no-op on a well-formed sequence. Only the connecting waypoint moves — the rest
+ * of the path keeps its authored shape.
  */
 export function chainPathToPose(waypoints, startPose) {
   if (!waypoints?.length || !startPose) return waypoints;
@@ -573,6 +573,8 @@ function matchesPathRef(path, targetId) {
  * Resolve an Auto's sequence into per-slot chained waypoints.
  * Positional slots (`path`, `point`) each start exactly where the previous positional
  * slot ended — the very first positional slot is left at its authored/stored position.
+ * Path→path joints are also written through on edit (see chainLinks); this snap remains
+ * as a display fallback when a gap is left behind (reorder, newly inserted existing path).
  * Non-positional slots (`subsystem`, `wait`, `parallel`) pass the running pose through
  * unchanged. Returns the sequence with a `chainedWaypoints` (+ resolved `path`/`point`)
  * field added to each slot, ready for generateTrajectory().
@@ -606,7 +608,7 @@ export function buildAutoChain(sequence, { paths = [], points = [] } = {}) {
         resolved.push({ ...slot, chainedWaypoints: null, point: null });
         continue;
       }
-      const endRotation = slot.rotation ?? point.rotation ?? 0;
+      const endRotation = point.rotation ?? 0;
       if (!currentPose) {
         // First positional slot in the sequence: nothing to connect from yet.
         resolved.push({ ...slot, chainedWaypoints: null, point });

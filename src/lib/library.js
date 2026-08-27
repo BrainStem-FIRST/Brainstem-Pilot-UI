@@ -23,13 +23,21 @@ export function safeId(name) {
  * used a stricter slug, so a reference matches on the id or on either slug form.
  */
 export function matchesRef(record, targetId) {
-  if (!record || targetId == null) return false;
+  if (!record || targetId == null || targetId === '') return false;
   const target = String(targetId);
-  const id = String(record._id ?? record.id ?? '');
   const name = (record.name ?? '').trim();
-  return id === target
-    || safeNameFromString(name) === target
-    || name.replace(/[^a-zA-Z0-9_\-]/g, '_') === target;
+  const recordSlugs = [
+    String(record._id ?? ''),
+    String(record.id ?? ''),
+    safeNameFromString(name),
+    name.replace(/[^a-zA-Z0-9_\-]/g, '_'),
+  ].filter(Boolean);
+  const targetSlugs = [
+    target,
+    safeNameFromString(target),
+    target.replace(/[^a-zA-Z0-9_\-]/g, '_'),
+  ].filter(Boolean);
+  return recordSlugs.some(s => targetSlugs.includes(s));
 }
 
 export function findPath(paths, id) {
@@ -89,6 +97,10 @@ export function removeReferencesFromAutos(autos, kind, record) {
   });
 }
 
+function recordPersistKey(r) {
+  return String(r?.id || r?._id || safeId(r?.name) || '');
+}
+
 function isSameRecord(a, b) {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -101,12 +113,14 @@ function stripVolatile(record) {
 }
 
 async function persistDiff(prev, next, save, remove) {
-  const prevById = new Map((prev ?? []).map(r => [String(r.id), r]));
-  const nextById = new Map((next ?? []).map(r => [String(r.id), r]));
+  const prevById = new Map((prev ?? []).map(r => [recordPersistKey(r), r]));
+  const nextById = new Map((next ?? []).map(r => [recordPersistKey(r), r]));
   for (const [id, record] of nextById) {
+    if (!id) continue;
     if (!isSameRecord(prevById.get(id), record)) await save(record);
   }
   for (const [id, record] of prevById) {
+    if (!id) continue;
     if (!nextById.has(id)) await remove(record);
   }
 }

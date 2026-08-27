@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { readEntity, createEntity, updateEntity, deleteEntity, safeNameFromString } from '../lib/dataService';
 import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, MonitorPlay, Copy, Library } from 'lucide-react';
@@ -9,6 +9,10 @@ import { computeFieldLayout, drawFieldImage, fieldToPixels } from '../lib/fieldC
 import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
 import { getMotionUnitsForLeague } from '../lib/motionUnits';
+import { ftcClassNameClash } from '../lib/ftcOpmodeGenerator';
+import { groupByFolder, folderNames, folderOf } from '../lib/folders';
+import { useFolders } from '../hooks/useFolders';
+import { NewFolderButton, FolderPicker, FolderSection } from '../components/library/FolderControls';
 
 function safeId(name) {
   return safeNameFromString(name);
@@ -96,13 +100,15 @@ function RenameInline({ name, onSave, onCancel }) {
 
 export default function StringBuilderList() {
   const navigate = useNavigate();
-  const { projectType } = useLeague();
+  const { projectType, isFtc } = useLeague();
   const motionUnits = getMotionUnitsForLeague(projectType);
   const [autos, setAutos] = useState([]);
   const [allPaths, setAllPaths] = useState([]);
   const [allPoints, setAllPoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [renamingId, setRenamingId] = useState(null);
+  const autosRef = useRef([]);
+  useEffect(() => { autosRef.current = autos; }, [autos]);
 
   useEffect(() => {
     Promise.all([
@@ -118,8 +124,19 @@ export default function StringBuilderList() {
     }).catch(() => setLoading(false));
   }, []);
 
+  /** `baseName`, or the first `baseName_N` that no existing Auto already slugs to. */
+  const uniqueCopyName = (baseName) => {
+    let uniqueName = baseName;
+    let counter = 1;
+    while (autos.some(item => safeId(item.name) === safeId(uniqueName))) {
+      uniqueName = `${baseName}_${counter}`;
+      counter++;
+    }
+    return uniqueName;
+  };
+
   const createAuto = async () => {
-    const name = `Auto ${autos.length + 1}`;
+    const name = uniqueCopyName('Auto');
     try {
       const created = await createEntity('Auto', { name, sequence: [] });
       const recordId = created?.id ?? safeId(name);
@@ -129,27 +146,36 @@ export default function StringBuilderList() {
     }
   };
 
-  const deleteAuto = async (e, id) => {
+  const deleteAuto = async (e, auto) => {
     e.stopPropagation();
+    const id = auto._id ?? auto.id;
+    if (!window.confirm(`Delete "${auto.name}" and its JSON file?`)) return;
     await deleteEntity('Auto', id);
     setAutos(prev => prev.filter(a => (a._id ?? a.id) !== id));
   };
 
+  // An Auto's filename is its safe-name slug, so two Autos that slug the same would write
+  // over each other's .auto.json (and, in FTC, each other's generated OpMode). Reject the
+  // rename rather than silently destroying the other one.
   const renameAuto = async (id, name) => {
-    await updateEntity('Auto', id, { name });
-    const newId = safeId(name);
-    setAutos(prev => prev.map(a => (a._id ?? a.id) === id ? { ...a, name, id: newId } : a));
-    setRenamingId(null);
-  };
-
-  const uniqueCopyName = (baseName) => {
-    let uniqueName = baseName;
-    let counter = 1;
-    while (autos.some(item => safeId(item.name) === safeId(uniqueName))) {
-      uniqueName = `${baseName}_${counter}`;
-      counter++;
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) { setRenamingId(null); return; }
+    const clash = autos.find(a => (a._id ?? a.id) !== id && safeId(a.name) === safeId(trimmed));
+    if (clash) {
+      window.alert(`Another Auto is already named "${clash.name}".`);
+      return;
     }
-    return uniqueName;
+    // FTC additionally needs the generated OpMode class to be unique — punctuation is
+    // stripped from class names, so distinct filenames can still collide there.
+    const classClash = isFtc ? ftcClassNameClash(trimmed, autos, id) : null;
+    if (classClash) {
+      window.alert(`"${trimmed}" would generate the same OpMode class as "${classClash.name}". Pick a name that differs by more than punctuation.`);
+      return;
+    }
+    await updateEntity('Auto', id, { name: trimmed });
+    const newId = safeId(trimmed);
+    setAutos(prev => prev.map(a => (a._id ?? a.id) === id ? { ...a, name: trimmed, id: newId } : a));
+    setRenamingId(null);
   };
 
   const duplicateAuto = async (e, auto) => {
@@ -161,6 +187,26 @@ export default function StringBuilderList() {
     });
     setAutos(prev => [created, ...prev]);
   };
+
+  // Folders label the Auto record; the .auto.json files stay flat in autos/.
+  const persistFolder = useCallback(async (auto, folder) => {
+    const aId = auto._id ?? auto.id;
+    setAutos(prev => prev.map(a => ((a._id ?? a.id) === aId ? { ...a, folder } : a)));
+    await updateEntity('Auto', aId, { folder });
+  }, []);
+
+  const retagFolder = useCallback(async (from, to) => {
+    const affected = autosRef.current.filter(a => folderOf(a) === from);
+    setAutos(prev => prev.map(a => (folderOf(a) === from ? { ...a, folder: to } : a)));
+    for (const a of affected) await updateEntity('Auto', a._id ?? a.id, { folder: to });
+  }, []);
+
+  const {
+    folderRegistry, collapsed, toggleCollapsed, createFolder, renameFolder, deleteFolder,
+  } = useFolders('autos', retagFolder);
+
+  const availableFolders = useMemo(() => folderNames(folderRegistry, autos), [folderRegistry, autos]);
+  const groups = useMemo(() => groupByFolder(autos, folderRegistry), [autos, folderRegistry]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col p-6 relative overflow-hidden">
@@ -185,6 +231,7 @@ export default function StringBuilderList() {
           <button onClick={() => navigate('/library')} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
             <Library className="w-4 h-4" /> Path &amp; Point Index
           </button>
+          <NewFolderButton onCreate={createFolder} />
           <button onClick={createAuto} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
             <Plus className="w-4 h-4" /> New Auto
           </button>
@@ -194,7 +241,7 @@ export default function StringBuilderList() {
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
           </div>
-        ) : autos.length === 0 ? (
+        ) : autos.length === 0 && availableFolders.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
               <Layers className="w-8 h-8 text-violet-400/60" />
@@ -205,8 +252,24 @@ export default function StringBuilderList() {
             </button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {autos.map((auto, i) => {
+          <div className="pb-8">
+            {groups.map(group => (
+              <FolderSection
+                key={group.name || '\u0000unfiled'}
+                group={group}
+                count={group.records.length}
+                collapsed={collapsed.has(group.name)}
+                onToggle={() => toggleCollapsed(group.name)}
+                onRename={name => renameFolder(group.name, name)}
+                onDelete={() => deleteFolder(group.name)}
+              >
+                {group.records.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground/60 py-2">
+                    Empty — move an Auto here with the folder dropdown on its card.
+                  </p>
+                ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {group.records.map((auto, i) => {
               const aId = auto._id ?? auto.id;
               if (!aId) return null;
               return (
@@ -230,20 +293,27 @@ export default function StringBuilderList() {
                         <p className="text-xs text-muted-foreground mt-0.5">{(auto.sequence?.length ?? 0)} slots</p>
                       </div>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Runnable</span>
                   </div>
                   {renamingId !== aId && (
-                    <div className="px-4 pb-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={e => duplicateAuto(e, auto)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Duplicate">
+                    <div className="px-4 pb-3 flex items-center gap-1">
+                      <div onClick={e => e.stopPropagation()} className="min-w-0 mr-auto">
+                        <FolderPicker
+                          value={auto.folder}
+                          folders={availableFolders}
+                          onMove={folder => persistFolder(auto, folder)}
+                          onCreateFolder={createFolder}
+                        />
+                      </div>
+                      <button onClick={e => duplicateAuto(e, auto)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all opacity-0 group-hover:opacity-100" title="Duplicate">
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); navigate(`/auto-simulator/${aId}`); }} className="p-1.5 rounded-md text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-all" title="Simulate">
+                      <button onClick={e => { e.stopPropagation(); navigate(`/auto-simulator/${aId}`); }} className="p-1.5 rounded-md text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-all opacity-0 group-hover:opacity-100" title="Simulate">
                         <MonitorPlay className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); setRenamingId(aId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+                      <button onClick={e => { e.stopPropagation(); setRenamingId(aId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all opacity-0 group-hover:opacity-100">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={e => deleteAuto(e, aId)} className="p-1.5 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all">
+                      <button onClick={e => deleteAuto(e, auto)} className="p-1.5 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -251,6 +321,10 @@ export default function StringBuilderList() {
                 </motion.div>
               );
             })}
+                </div>
+                )}
+              </FolderSection>
+            ))}
           </div>
         )}
       </div>

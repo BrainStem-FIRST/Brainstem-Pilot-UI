@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { FRC_PROJECT_PATH, FTC_PROJECT_PATH, PROJECT_FOLDER_NAME } from '../lib/projectLocation';
 import {
   ChevronLeft, BookOpen, Route, Code2, Play, Cpu, FolderOpen,
   MapPin, Sparkles, RotateCcw, Zap, Settings2, Copy, MousePointer2,
@@ -211,7 +212,12 @@ export default function Documentation() {
                 caption="Home screen — open your project folder, then pick a module to start."
               />
               <ol className="list-decimal ml-5 space-y-3 text-sm">
-                <li>In your FRC codebase, create: <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">deploy/brainstemPilotAuto/</code></li>
+                <li>In your robot codebase, create the folder for your league:
+                  <div className="mt-1 space-y-0.5">
+                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FRC</span> <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">{FRC_PROJECT_PATH}</code></div>
+                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FTC</span> <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">{FTC_PROJECT_PATH}</code></div>
+                  </div>
+                </li>
                 <li>Open BrainSTEM Pilot → click <strong>Open Project</strong> (top-right).</li>
                 <li>Select that folder (Chrome or Edge required).</li>
                 <li>Default files are created: <code className="text-xs font-mono bg-secondary px-1 rounded">robot_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">app_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">subsystem_config.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">paths/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">skeletons/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">variants/</code></li>
@@ -399,7 +405,7 @@ export default function Documentation() {
                 <li>Visual bindings show/hide robot overlays during simulation.</li>
               </ul>
               <Callout color="green" title="Team workflow">
-                Commit <code className="font-mono bg-secondary px-1 rounded">deploy/brainstemPilotAuto/</code> to git so the whole team shares paths and autos.
+                Commit your <code className="font-mono bg-secondary px-1 rounded">{PROJECT_FOLDER_NAME}/</code> folder to git so the whole team shares paths and autos.
               </Callout>
             </Section>
           </div>

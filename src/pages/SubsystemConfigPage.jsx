@@ -53,7 +53,7 @@ export default function SubsystemConfigPage() {
   };
 
   const addSubsystem = () => {
-    const next = [...subsystems, { id: `sys-${Date.now()}`, name: 'New Subsystem', mechanismCount: 1, visualBinding: '', commands: [] }];
+    const next = [...subsystems, { id: `sys-${Date.now()}`, name: 'New Subsystem', visualBinding: '', commands: [] }];
     updateSubsystems(next);
     setExpandedIdx(next.length - 1);
   };
@@ -144,16 +144,7 @@ export default function SubsystemConfigPage() {
 
               {expandedIdx === i && (
                 <div className="px-4 pb-4 border-t border-border space-y-4">
-                  {/* Mechanism count + visual binding */}
                   <div className="grid grid-cols-2 gap-4 pt-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground font-medium">Mechanism Count</label>
-                      <input
-                        type="number" min={1} value={sys.mechanismCount ?? 1}
-                        onChange={e => updateSys(i, { mechanismCount: parseInt(e.target.value) })}
-                        className="bg-secondary/50 border border-border rounded px-2 py-1.5 text-xs font-mono text-foreground outline-none focus:border-primary"
-                      />
-                    </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-xs text-muted-foreground font-medium">Visual Binding (drawing)</label>
                       <select
