@@ -1,12 +1,17 @@
 {
   "name": "brainstem-pilot-ui",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:fresh": "vite optimize --force && vite",
+    "dev:desktop": "DESKTOP=1 concurrently -k -s first \"vite\" \"wait-on tcp:5173 && electron .\"",
     "build": "vite build",
+    "build:desktop": "DESKTOP=1 vite build",
+    "desktop:start": "npm run build:desktop && electron .",
+    "desktop:pack": "npm run build:desktop && electron-builder --dir",
+    "desktop:dist": "npm run build:desktop && electron-builder",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
@@ -88,6 +93,9 @@
     "@vitejs/plugin-react-swc": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.8.32",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.19.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",
@@ -97,9 +105,113 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "wait-on": "^8.0.1"
   },
   "allowScripts": {
-    "@swc/core@1.15.43": true
+    "@swc/core@1.15.43": true,
+    "electron@33.4.11": true
+  },
+  "description": "Autonomous path planner and auto builder for FIRST robotics teams.",
+  "author": {
+    "name": "BrainSTEM FIRST",
+    "email": "keerthana@whitmerindustries.com"
+  },
+  "license": "MIT",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "org.brainstemfirst.pilot",
+    "productName": "BrainSTEM Pilot",
+    "copyright": "Copyright \u00a9 BrainSTEM FIRST",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-win-x64-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-x64-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "maintainer": "BrainSTEM FIRST <keerthana@whitmerindustries.com>"
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-linux-x86_64.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "BrainStem-FIRST",
+      "repo": "Brainstem-Pilot-UI"
+    }
   }
 }

@@ -2,9 +2,17 @@ import path from 'path'
 import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vite'
 
+// The desktop build loads index.html off disk, so assets must resolve relative
+// to the document; the GitHub Pages build is served from a repo subpath.
+// `npm run build:desktop` sets DESKTOP=1 — everything else is identical.
+const isDesktop = process.env.DESKTOP === '1';
+
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/Brainstem-Pilot-UI/',
+  base: isDesktop ? './' : '/Brainstem-Pilot-UI/',
+  define: {
+    __DESKTOP_BUILD__: JSON.stringify(isDesktop),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -29,7 +37,8 @@ export default defineConfig({
     ],
   },
   server: {
-    open: true,
+    // The desktop shell opens its own window; don't also pop a browser tab.
+    open: !isDesktop,
     watch: {
       ignored: [
         '**/.git/**',

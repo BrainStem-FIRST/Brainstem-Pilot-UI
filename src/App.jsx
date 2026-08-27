@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageNotFound from './lib/PageNotFound';
 import Welcome from './pages/Welcome';
@@ -42,11 +42,17 @@ function AppRoutes() {
   );
 }
 
+// There is no server under the desktop build — index.html is loaded from disk, where a
+// path-based URL has nothing to serve it. The hash router keeps every route inside the one
+// document. The web build keeps clean paths (404.html bounces deep links back to index).
+const Router = __DESKTOP_BUILD__ ? HashRouter : BrowserRouter;
+const routerBasename = __DESKTOP_BUILD__ ? '/' : import.meta.env.BASE_URL;
+
 function App() {
   return (
     <QueryClientProvider client={queryClientInstance}>
       <ErrorBoundary>
-        <Router basename={import.meta.env.BASE_URL}>
+        <Router basename={routerBasename}>
           <AppRoutes />
         </Router>
       </ErrorBoundary>

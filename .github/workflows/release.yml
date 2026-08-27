@@ -1,0 +1,89 @@
+# Builds the desktop app for macOS, Windows and Linux and attaches the installers
+# to a GitHub Release. Triggered by pushing a version tag:
+#
+#   npm version minor && git push --follow-tags
+#
+# The GitHub Pages deploy (deploy.yml) is untouched and still runs on every push
+# to master — the two share a source tree but nothing else.
+name: Release Desktop App
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+          - os: windows-latest
+            name: Windows
+          - os: ubuntu-latest
+            name: Linux
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build desktop bundle and installers
+        run: npm run desktop:dist -- --publish never
+        env:
+          # Unsigned builds: without this electron-builder looks for signing
+          # identities in the runner keychain and fails when it finds none.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## BrainSTEM Pilot ${{ github.ref_name }}
+
+            Prefer not to install anything? The same app runs in the browser at
+            **https://brainstem-first.github.io/Brainstem-Pilot-UI/**
+
+            ### Downloads
+            | Platform | File |
+            | --- | --- |
+            | macOS (Apple Silicon) | `BrainSTEM Pilot-*-mac-arm64.dmg` |
+            | macOS (Intel) | `BrainSTEM Pilot-*-mac-x64.dmg` |
+            | Windows (installer) | `BrainSTEM Pilot-*-win-x64-setup.exe` |
+            | Windows (portable) | `BrainSTEM Pilot-*-win-x64-portable.exe` |
+            | Linux | `BrainSTEM Pilot-*-linux-x86_64.AppImage` |
+
+            > These builds are **not code-signed**. macOS: right-click the app and
+            > choose *Open* the first time (or run
+            > `xattr -cr "/Applications/BrainSTEM Pilot.app"`). Windows: click
+            > *More info → Run anyway* on the SmartScreen prompt.
