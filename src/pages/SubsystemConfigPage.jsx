@@ -92,7 +92,7 @@ export default function SubsystemConfigPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="flex items-center gap-3 px-4 py-3 bg-card border-b border-border shrink-0">
+      <div className="flex items-center gap-3 pl-14 pr-4 py-3 bg-card border-b border-border shrink-0">
         <button onClick={handleBack} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="w-4 h-4" />
           <span className="text-sm font-medium">Home</span>

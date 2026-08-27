@@ -23,3 +23,15 @@ interface Window {
     platform: string;
   };
 }
+
+/** Vite's `import.meta.env`. Declared here because jsconfig sets `"types": []`. */
+interface ImportMetaEnv {
+  readonly BASE_URL: string;
+  readonly MODE: string;
+  readonly DEV: boolean;
+  readonly PROD: boolean;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

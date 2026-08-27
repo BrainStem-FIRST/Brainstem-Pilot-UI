@@ -22,20 +22,30 @@ A trajectory planner for FRC/FTC robots that lets you visually build smooth Bezi
 
 **No real-time visualization.** Without watching a trajectory play out, acceleration violations, waypoint drift, and edge cases stay invisible until the code is on physical hardware, which is the slowest and most expensive place to find them.
 
-BrainSTEM Pilot puts the whole loop in one visual editor: draw the path, see the robot's bounding box sweep it, and read the time estimate before anything is deployed.
+BrainSTEM Pilot puts the whole loop in one visual editor: draw the path, see the robot's footprint sweep it, and read the time estimate before anything is deployed.
+
+**Low floor, high ceiling.** A rookie team can open the app and have a working auto on the field the same afternoon, without writing a line of trajectory math. Nothing about that gets in the way of a team chasing a top score — per-waypoint velocity and acceleration limits, decoupled holonomic rotation targets, mid-path subsystem triggers, parallel command groups, and one-click mirroring across both the field midline and the alliance line are all there when a routine needs to be squeezed for tenths.
 
 ### How it compares
 
-| Feature | BrainSTEM Pilot | Choreo | PathPlanner | Pedro Pathing | Road Runner |
+| Feature | ⭐ **BrainSTEM Pilot** | Choreo | PathPlanner | Pedro Pathing | Road Runner |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| Cross-system (FTC & FRC) | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Bézier curve drive trajectories | ✓ | ✓ | ✓ | ✓ | ✗ |
-| Precise execution time estimates | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Auto side-mirror (1 path → 4 paths) | ✓ | ✓ | ✓ | ✗ | ✗ |
-| Visualize dynamic bounding box | ✓ | ✗ | ✗ | ✗ | ✗ |
-| In-app subsystem configuration | ✓ | ✓ | ✓ | ✗ | ✗ |
-| Uncapped max profile utilization | ✓ | ✓ | ✗ | ✗ | ✗ |
-| Custom built-in simulator | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Cross-system (FTC & FRC) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Bézier curve drive trajectories | ✅ | ❌ <sup>1</sup> | ✅ | ✅ | ❌ <sup>2</sup> |
+| Execution time estimates | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Editor-side mirroring (1 path → 4 paths) | ✅ | ❌ <sup>3</sup> | ❌ <sup>3</sup> | ❌ | ❌ |
+| Footprint that changes with mechanism state | ✅ | ❌ <sup>4</sup> | ❌ <sup>4</sup> | ❌ <sup>4</sup> | ❌ |
+| Subsystems and commands defined in the tool | ✅ | ❌ <sup>5</sup> | ✅ <sup>6</sup> | ❌ <sup>5</sup> | ❌ |
+| Built-in simulator or playback | ✅ | ✅ | ✅ | ✅ <sup>7</sup> | ❌ <sup>8</sup> |
+
+<sup>1</sup> Choreo solves a numerical optimization for a time-optimal trajectory rather than fitting Bézier curves.
+<sup>2</sup> Road Runner builds paths from quintic Hermite splines.
+<sup>3</sup> Both flip a path to the other alliance at runtime; neither mirrors across the field midline in the editor, so a left-side and right-side routine are two separate paths.
+<sup>4</sup> All three draw the robot as a fixed bumper rectangle. None of them grow or shrink the footprint as a mechanism extends.
+<sup>5</sup> Both place event markers that call *named commands* implemented in robot code; neither defines the subsystems themselves.
+<sup>6</sup> PathPlanner manages named commands and command groups in its project browser. BrainSTEM Pilot goes a step further and binds each command to a drawing, which is what lets the field view show the mechanism moving.
+<sup>7</sup> Through the Pedro PathPlanner GUI, a fork of PathPlanner maintained by the Pedro Pathing project.
+<sup>8</sup> MeepMeep, the visualizer most Road Runner teams use, is a separate community tool rather than part of Road Runner.
 
 ## What it does
 
@@ -45,11 +55,11 @@ BrainSTEM Pilot is a visual editor for building autonomous routines instead of h
 - **Rotation targets** — schedule heading changes at any point along a path, independent of the drive path itself (for holonomic drivetrains).
 - **Subsystem triggers** — mark a point in the path where a subsystem command (e.g. raise elevator, run intake) should fire, previewed as stars on the canvas.
 - **Constraints** — override max velocity/acceleration per path, or per waypoint (min/max speed, max turn power, distance/heading tolerance, time limits).
-- **Skeleton & variant autos** — build a reusable command skeleton (path slots, subsystem commands, waits, parallel groups), then create multiple runnable variants that fill in different paths/waits without redefining the sequence.
-- **Simulator** — play back a variant auto on the field, toggle Left/Right and Blue/Red alliance perspective, and scrub through the command list.
+- **Autos** — sequence paths, points, waits, subsystem commands and parallel groups into one runnable routine, with several autos open at once as tabs.
+- **Simulator** — play back an auto on the field, toggle Left/Right and Blue/Red alliance perspective, and scrub through the command list.
 - **Path duplication** — copy a path to the same side or mirror it across the field midline (auto-flips L/R).
 
-Everything (robot settings, app settings, subsystem config, paths, skeletons, variants) is saved as plain JSON files in a project folder on your computer, so it can be committed to your robot code repo like any other source file.
+Everything (robot settings, app settings, subsystem config, paths, points, autos) is saved as plain JSON files in a project folder on your computer, so it can be committed to your robot code repo like any other source file. On FTC projects the app also generates a matching Java OpMode for each auto.
 
 ## Web or desktop?
 
@@ -69,62 +79,17 @@ The desktop builds are **not code-signed**, so the OS warns on first launch:
 
 ## Getting started
 
-1. In your FRC/FTC codebase, create a folder: `deploy/brainstemPilotAuto/` in FRC or just `brainstemPilotAuto` in FTC
-2. Open the app and click **Open Project** (top-right) — requires Chrome or Edge (uses the File System Access API).
-3. Select that folder. Default files are created for you: `robot_settings.json`, `app_settings.json`, `subsystem_config.json`, plus `paths/`, `skeletons/`, and `variants/` subfolders.
+1. In your FRC/FTC codebase, create a folder: `deploy/brainstemPilotAuto/` in FRC or just `brainstemPilotAuto` in FTC.
+2. Open the app, pick **FRC** or **FTC** (top-right), then click **Open project**. On the web this requires Chrome or Edge (it uses the File System Access API); the desktop app works anywhere.
+3. Select that folder. Three files are created for you — `robot_settings.json`, `app_settings.json`, `subsystem_config.json` — and `paths/`, `points/` and `autos/` appear as you save your first of each.
 4. Open **Settings**:
    - **Robot Settings** — set frame width/length, default max velocity/acceleration, and physical subsystem attachments. New paths inherit these until overridden.
    - **App Settings** — pick the season field image used across the path editor, path previews, and simulator.
-5. (Optional) Open **Configure Subsystems** to define mechanisms and commands before adding subsystem triggers to a path.
-6. From the home screen, **Create a Path** to start building trajectories, or go to **Skeleton Builder** to assemble a reusable auto sequence and generate variants from it.
-7. Commit `deploy/brainstemPilotAuto/` to git so the whole team shares paths and autos.
+5. (Optional) Open **Configure Subsystems** to define mechanisms and their commands, and bind each to a drawing, before adding subsystem triggers to a path.
+6. From the home screen, open **Build an Auto** and hit **New Auto**. Inside the workspace, add paths, points, waits, subsystem commands and parallel groups to the sequence, draw each path on the field, and press **Play** to watch the whole routine.
+7. Use the **Path & Point Index** to rename, move or delete a saved path or point — every auto that references it follows along.
+8. Commit `deploy/brainstemPilotAuto/` to git so the whole team shares paths and autos. On FTC projects, commit the generated `opmodeAutos/` Java files alongside them.
 
-The in-app **Documentation** page (linked top-left) covers the path editor, waypoints/Bezier curves, optional per-waypoint parameters, rotation targets, subsystem triggers, and the skeleton/variant workflow in more detail, with screenshots.
+The in-app **Documentation** page (linked top-left) covers the path editor, waypoints/Bezier curves, optional per-waypoint parameters, rotation targets, subsystem triggers, and the auto workspace in more detail, with screenshots.
 
-## Development
-
-```bash
-npm install
-npm run dev            # web app at http://localhost:5173/Brainstem-Pilot-UI/
-npm run dev:desktop    # same app inside the Electron shell, with hot reload
-```
-
-Builds:
-
-```bash
-npm run build          # web bundle for GitHub Pages -> dist/
-npm run build:desktop  # same bundle, relative paths + hash routing -> dist/
-npm run desktop:pack   # unpacked desktop app (fast, for testing) -> release/
-npm run desktop:dist   # installers for the current platform -> release/
-```
-
-The two targets differ only in `DESKTOP=1`: the web build is served from the
-`/Brainstem-Pilot-UI/` subpath and uses `BrowserRouter` (with `public/404.html`
-bouncing deep links back to `index.html`), while the desktop build loads
-`index.html` off disk, so it uses a relative base and `HashRouter`. The Electron
-shell itself is in [`electron/`](electron/).
-
-The app icon is generated from `build/icon-source.png` (the neon brain artwork,
-trimmed to its content). To regenerate the derived files after replacing it:
-
-```bash
-magick build/icon-source.png -filter Lanczos -resize 840x -unsharp 0x1.2+0.6+0.02 \
-  -background black -gravity center -extent 1024x1024 \
-  \( -size 1024x1024 xc:none -draw "roundrectangle 0,0,1023,1023,224,224" \) \
-  -alpha set -compose DstIn -composite build/icon.png
-magick build/icon.png -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
-magick build/icon.png -resize 192x192 -strip public/favicon.png
-```
-
-### Shipping a release
-
-GitHub Pages redeploys on every push to `master` ([deploy.yml](.github/workflows/deploy.yml)).
-Desktop installers are built from a version tag ([release.yml](.github/workflows/release.yml)):
-
-```bash
-npm version minor && git push --follow-tags
-```
-
-That builds on macOS, Windows and Linux runners and attaches the `.dmg`, `.exe`,
-`.AppImage` and `.deb` artifacts to a GitHub Release. No secrets are needed —
-the workflow publishes with the built-in `GITHUB_TOKEN`.
+> Projects made with an older version stored autos as a *skeleton* plus *variants*. Opening one migrates it into `autos/` automatically and files the originals under `legacy/`; nothing reads them afterwards.

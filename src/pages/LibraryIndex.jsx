@@ -365,7 +365,7 @@ export default function LibraryIndex() {
   return (
     <div className="min-h-screen bg-background flex flex-col p-6">
       <div className="max-w-6xl mx-auto w-full flex flex-col flex-1 min-h-0">
-        <div className="flex items-center gap-4 mb-6 flex-wrap">
+        <div className="flex items-center gap-4 mb-6 flex-wrap pl-10">
           <Link to="/" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Home</span>

@@ -22,7 +22,6 @@ function createWindow() {
     minHeight: 680,
     show: false,
     backgroundColor: '#10131a', // matches --background, so no white flash on load
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

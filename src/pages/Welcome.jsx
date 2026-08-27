@@ -6,6 +6,7 @@ import { getProjectDir, setProjectDir, hasProjectDir, initializeProjectFolder } 
 import { clearTabs } from '../lib/workspaceTabs';
 import { projectFolderPath } from '../lib/projectLocation';
 import { useLeague } from '../context/LeagueContext';
+import AppLogo from '../components/AppLogo';
 
 const cards = [
 {
@@ -181,6 +182,7 @@ export default function Welcome() {
         transition={{ duration: 0.5 }}
         className="text-center mb-10 relative mt-10">
 
+        <AppLogo className="w-24 h-24 mx-auto mb-5 shadow-lg shadow-primary/20" />
         <div className="flex items-center justify-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
             <Zap className="w-4 h-4 text-primary" />

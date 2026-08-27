@@ -160,7 +160,7 @@ export default function Documentation() {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <header className="border-b border-border bg-card px-4 py-3 flex items-center gap-3 shrink-0 z-20">
+      <header className="border-b border-border bg-card pl-14 pr-4 py-3 flex items-center gap-3 shrink-0 z-20">
         <Link to="/" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="w-4 h-4" />
           <span className="text-xs font-medium">Home</span>

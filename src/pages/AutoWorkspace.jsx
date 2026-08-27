@@ -1374,7 +1374,7 @@ export default function AutoWorkspace() {
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Tab strip */}
-      <div className="flex items-center gap-1 px-2 pt-2 bg-card border-b border-border shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-1 pl-12 pr-2 pt-2 bg-card border-b border-border shrink-0 overflow-x-auto">
         <button onClick={handleBack} className="flex items-center gap-1 px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors shrink-0">
           <ChevronLeft className="w-4 h-4" />
         </button>

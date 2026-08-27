@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
+import { HomeLogoLink } from './components/AppLogo';
 import PageNotFound from './lib/PageNotFound';
 import Welcome from './pages/Welcome';
 import Settings from './pages/Settings';
@@ -23,6 +24,7 @@ function AppRoutes() {
   return (
     <LeagueProvider>
       <FieldConfigProvider>
+        <HomeLogoLink />
         <ErrorBoundary key={location.pathname}>
         <Routes>
           <Route path="/" element={<Welcome />} />

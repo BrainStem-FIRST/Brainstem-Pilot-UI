@@ -219,7 +219,7 @@ export default function StringBuilderList() {
       </div>
 
       <div className="relative max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-8 pl-10">
           <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Home</span>

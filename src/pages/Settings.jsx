@@ -137,7 +137,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-4 mb-6 pl-10">
           <button onClick={handleBack} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Home</span>
