@@ -4,6 +4,7 @@ import { FRC_PROJECT_PATH, FTC_PROJECT_PATH, PROJECT_FOLDER_NAME } from '../lib/
 import {
   ChevronLeft, BookOpen, Route, Code2, Play, Cpu, FolderOpen,
   MapPin, Sparkles, RotateCcw, Zap, Settings2, Copy, MousePointer2,
+  Layers, Link2, AlertTriangle, Folder,
 } from 'lucide-react';
 import {
   FIELD_IMAGE,
@@ -28,10 +29,16 @@ const NAV = [
   { id: 'triggers', label: 'Subsystem Triggers', icon: Zap },
   { id: 'constraints', label: 'Constraints', icon: Settings2 },
   { id: 'duplicate', label: 'Duplicating Paths', icon: Copy },
-  { id: 'skeleton', label: 'Skeleton Autos', icon: Code2 },
-  { id: 'variant', label: 'Variant Autos', icon: Play },
+  { id: 'autos', label: 'Autos & the Sequence', icon: Layers },
+  { id: 'points', label: 'Points', icon: MapPin },
+  { id: 'chaining', label: 'How Slots Connect', icon: Link2 },
+  { id: 'warnings', label: 'Warnings', icon: AlertTriangle },
+  { id: 'folders', label: 'Folders', icon: Folder },
   { id: 'simulate', label: 'Simulate & Preview', icon: Play },
   { id: 'subsystems', label: 'Subsystems', icon: Cpu },
+  { id: 'frc', label: 'FRC Specifics', icon: Cpu },
+  { id: 'ftc', label: 'FTC Specifics', icon: Cpu },
+  { id: 'files', label: 'File Format', icon: Code2 },
 ];
 
 const OPTIONAL_PARAMS = [
@@ -220,7 +227,8 @@ export default function Documentation() {
                 </li>
                 <li>Open BrainSTEM Pilot → click <strong>Open Project</strong> (top-right).</li>
                 <li>Select that folder (Chrome or Edge required).</li>
-                <li>Default files are created: <code className="text-xs font-mono bg-secondary px-1 rounded">robot_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">app_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">subsystem_config.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">paths/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">skeletons/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">variants/</code></li>
+                <li>Default files are created: <code className="text-xs font-mono bg-secondary px-1 rounded">robot_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">app_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">subsystem_config.json</code>, and the <code className="text-xs font-mono bg-secondary px-1 rounded">paths/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">points/</code> and <code className="text-xs font-mono bg-secondary px-1 rounded">autos/</code> folders as you save into them.</li>
+                <li>Opening a project from an older version migrates its <code className="text-xs font-mono bg-secondary px-1 rounded">skeletons/</code> and <code className="text-xs font-mono bg-secondary px-1 rounded">variants/</code> into <code className="text-xs font-mono bg-secondary px-1 rounded">autos/</code>, then moves the originals to <code className="text-xs font-mono bg-secondary px-1 rounded">legacy/</code>. Nothing reads them after that; delete the folder once the autos look right.</li>
               </ol>
               <h3 className="text-sm font-bold text-foreground mt-8 mb-2">Settings</h3>
               <p className="text-sm">
@@ -253,11 +261,11 @@ export default function Documentation() {
             </Section>
 
             <Section id="paths" title="Paths Overview" subtitle="Bezier drive paths saved as JSON" icon={Route}>
-              <p>Paths are standalone trajectories you plug into variant autos. Each path is a sequence of waypoints connected by smooth Bezier curves.</p>
+              <p>Paths are standalone trajectories you drop into an Auto. Each path is a sequence of waypoints connected by smooth Bezier curves, saved as its own file and <strong>shared</strong> — the same path can appear in several Autos, and editing it changes all of them.</p>
               <DocScreenshot
                 src={DOC_IMAGES.pathsList}
-                alt="My Autonomous Paths list"
-                caption="My Autonomous Paths — path cards with field previews."
+                alt="Path & Point Index"
+                caption="Path & Point Index — every saved path and point, with field previews and where each is used."
               />
               <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Creating a path</h3>
               <p>Home → <strong>Create a Path</strong> → <strong>New Path</strong>. Choose whether the path starts on the <strong>Left (L)</strong> or <strong>Right (R)</strong> side. This is metadata only — it does not move your waypoints.</p>
@@ -357,40 +365,97 @@ export default function Documentation() {
               <DuplicatePathPopupScreen />
             </Section>
 
-            <Section id="skeleton" title="Skeleton Autos" subtitle="Reusable command templates" icon={Code2}>
+            <Section id="autos" title="Autos & the Sequence" subtitle="One Auto, one file, one ordered list" icon={Layers}>
+              <p>An Auto is a single ordered <strong>sequence</strong> of slots, saved as one self-contained file in <code className="font-mono bg-secondary px-1 rounded">autos/</code>. There is no separate template to keep in sync — what you see in the list is what runs.</p>
               <DocScreenshot
-                src={DOC_IMAGES.skeletonBuilder}
-                alt="Skeleton auto builder"
-                caption="Skeleton auto editor — command sequence with frozen Add Command panel."
+                src={DOC_IMAGES.autoWorkspace}
+                alt="Auto workspace with a sequence of path, point, subsystem and wait slots"
+                caption="Auto workspace — the sequence on the left, the field in the middle, and the selected slot's settings on the right."
               />
-              <ul className="list-disc ml-5 space-y-1 text-sm mt-4">
-                <li><strong>Path slot</strong>, <strong>Subsystem command</strong>, <strong>Wait</strong>, <strong>Parallel group</strong></li>
-                <li>Add Command panel stays fixed while scrolling the sequence.</li>
+              <Callout color="violet" title="Replaces skeletons and variants">
+                Older versions split an Auto into a shared <em>skeleton</em> of commands plus a <em>variant</em> of per-command overrides. That is gone. Opening an old project migrates it automatically and files the originals under <code className="font-mono bg-secondary px-1 rounded">legacy/</code>.
+              </Callout>
+              <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Slot types</h3>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm">
+                <li><strong>Path</strong> — drives a saved path. Click its name in the list to rename it; the rename follows into every Auto that uses it.</li>
+                <li><strong>Point</strong> — drives to a saved field position. See <a href="#points" className="text-primary hover:underline">Points</a>.</li>
+                <li><strong>Subsystem</strong> — runs one command on one subsystem, then moves on.</li>
+                <li><strong>Wait</strong> — pauses for a number of seconds.</li>
+                <li><strong>Parallel</strong> — runs several sub-commands at once. Each branch picks a subsystem and then a command under it.</li>
+              </ul>
+              <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Working with the sequence</h3>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm">
+                <li>Drag from the palette to insert at a position, or drag a slot by its grip to reorder.</li>
+                <li><strong>Skip</strong> takes a slot out of the run without deleting it — it contributes no motion and no time.</li>
+                <li>Selecting a Path or Point slot opens it on the field for editing, right there in the workspace.</li>
+                <li>Undo and redo cover the sequence <em>and</em> the shared paths and points, since dragging a waypoint edits a path rather than the Auto.</li>
+              </ul>
+              <Callout color="yellow" title="Autos cannot share a name">
+                An Auto&rsquo;s filename comes from its name, so two Autos with the same name would overwrite each other. Renaming to a name already in use is refused, and the name bar pauses saving until you pick another.
+              </Callout>
+            </Section>
+
+            <Section id="points" title="Points" subtitle="A named field position the robot drives to" icon={MapPin}>
+              <p>A Point is a saved pose — position and heading — that you can drop into any Auto. Like paths, points are <strong>shared</strong>: move or turn one and every slot using it moves with it, in every Auto.</p>
+              <Callout color="primary" title="Heading belongs to the Point">
+                A Point&rsquo;s rotation is part of the Point, not of the slot. Using the same Point three times in one Auto gives you the same position <em>and</em> the same heading all three times. If you need two different headings, make two Points.
+              </Callout>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm mt-4">
+                <li>A path ending into a Point is <strong>not</strong> joined to it — the robot drives a connecting segment from where the path ends to the Point.</li>
+                <li>A path that comes <em>after</em> a Point starts on it, heading included.</li>
+                <li>Rename a Point from its slot in the sequence, or from the Path &amp; Point Index.</li>
               </ul>
             </Section>
 
-            <Section id="variant" title="Variant Autos" subtitle="Runnable autos linked to a skeleton" icon={Play}>
-              <DocScreenshot
-                src={DOC_IMAGES.variantAuto}
-                alt="Variant auto editor"
-                caption="Variant auto — fill path slots, adjust waits, and preview the runnable auto."
-              />
-              <ul className="list-disc ml-5 space-y-1 text-sm mt-4">
-                <li>Assign paths to path slots; skip or adjust waits per command.</li>
-                <li>Renaming a skeleton updates <code className="font-mono bg-secondary px-1 rounded">skeletonId</code> in linked variants.</li>
+            <Section id="chaining" title="How Slots Connect" subtitle="Where one slot ends, the next begins" icon={Link2}>
+              <p>Only <strong>Path</strong> and <strong>Point</strong> slots have a position. Subsystem, Wait and Parallel slots pass the robot&rsquo;s current pose straight through — they never move it.</p>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
+                <li>The first positional slot starts wherever it was drawn.</li>
+                <li>Every other joint is <strong>live</strong>: drag a path&rsquo;s end and the next path&rsquo;s start moves with it — position and heading together — and that change is written into the next path&rsquo;s file, in every Auto that chains them. Drag a start and the previous path&rsquo;s end follows.</li>
+                <li>Only the connecting waypoint moves. The rest of each path keeps the shape you drew.</li>
               </ul>
+              <Callout color="yellow" title="Reordering can leave a gap">
+                Moving a slot gives it new neighbours without moving any coordinates, so its start may no longer match where the previous slot ends. The slot is flagged with a warning rather than having its path silently dragged across the field.
+              </Callout>
             </Section>
 
-            <Section id="simulate" title="Simulate & Preview" subtitle="Watch your variant auto run" icon={Play}>
+            <Section id="warnings" title="Warnings" subtitle="Small amber triangles on anything unfinished" icon={AlertTriangle}>
+              <p>A hazard triangle marks a slot that would not do what you meant. It is a warning, not an error — a half-filled slot is a normal state mid-edit and nothing blocks saving.</p>
               <DocScreenshot
-                src={DOC_IMAGES.simulator}
-                alt="Auto simulator"
-                caption="Simulate & Preview — field view, L/R and Blue/Red toggles, playback bar, and command list."
+                src={DOC_IMAGES.warnings}
+                alt="Sequence with amber hazard triangles on an unassigned subsystem slot and a zero-second wait"
+                caption="An unfinished Subsystem slot and a 0s Wait, each flagged with the reason underneath."
               />
-              <ul className="list-disc ml-5 space-y-1 text-sm">
-                <li><strong>Left / Right</strong> — flip display for opposite field side.</li>
-                <li><strong>Blue / Red</strong> — alliance perspective.</li>
-                <li><strong>Command list</strong> — scrollable; click to seek.</li>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
+                <li>A Subsystem slot, Parallel branch, or trigger with no subsystem or no command selected.</li>
+                <li>A subsystem or command that no longer exists — renamed or deleted in Configure Subsystems after the slot was set up.</li>
+                <li>A Path or Point slot whose record is missing, or a path with fewer than two waypoints.</li>
+                <li>A Wait set to 0s, or a Parallel group with no sub-commands.</li>
+                <li>A slot whose start does not match where the previous one ends.</li>
+              </ul>
+              <p className="text-sm mt-3">Hover the triangle for the full list. The Subsystem Triggers header carries one too, so a trigger that would never fire is visible even when the section is collapsed.</p>
+            </Section>
+
+            <Section id="folders" title="Folders" subtitle="Grouping for Autos, paths and points" icon={Folder}>
+              <DocScreenshot
+                src={DOC_IMAGES.autosList}
+                alt="Build an Auto list with folder grouping"
+                caption="The Auto list — New Folder groups your routines; each card carries a folder dropdown."
+              />
+              <p className="mt-4">Use <strong>New Folder</strong> in the Auto list or the Path &amp; Point Index to group records. Move a record with the folder dropdown on its card; the last option creates a new folder and files it there in one step.</p>
+              <Callout color="primary" title="Folders are labels, not directories">
+                Every record stays in its own flat file under <code className="font-mono bg-secondary px-1 rounded">autos/</code>, <code className="font-mono bg-secondary px-1 rounded">paths/</code> or <code className="font-mono bg-secondary px-1 rounded">points/</code> and simply carries a <code className="font-mono bg-secondary px-1 rounded">folder</code> name. Nothing your robot code reads has to change, and moving a record is one field, not a file move.
+              </Callout>
+              <p className="text-sm mt-3">Deleting a folder moves its contents to <strong>Unfiled</strong>; it never deletes records. Searching narrows within folders rather than flattening them.</p>
+            </Section>
+
+            <Section id="simulate" title="Simulate & Preview" subtitle="Play the whole routine on the field" icon={Play}>
+              <p>Playback lives in the Auto workspace — there is no separate simulator mode to switch into. The bar along the bottom plays the whole sequence, and the slot currently running is highlighted in the list.</p>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
+                <li><strong>Play / Stop / Replay</strong>, plus a scrubber you can drag to any moment.</li>
+                <li>Each slot shows its own duration, and the bar shows elapsed and total time.</li>
+                <li>Clicking the sequence panel returns you to editing.</li>
+                <li><strong>Blue / Red</strong> and, in FRC, <strong>L / R</strong> change the preview only — your saved coordinates never move.</li>
               </ul>
             </Section>
 
@@ -404,9 +469,50 @@ export default function Documentation() {
                 <li><Link to="/subsystem-config" className="text-primary hover:underline">Configure Subsystems</Link> from the home screen.</li>
                 <li>Visual bindings show/hide robot overlays during simulation.</li>
               </ul>
+            </Section>
+
+            <Section id="frc" title="FRC Specifics" subtitle="What differs on the FRC side" icon={Cpu}>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm">
+                <li><strong>Project folder</strong> — <code className="font-mono bg-secondary px-1 rounded">{FRC_PROJECT_PATH}</code>. It sits inside <code className="font-mono bg-secondary px-1 rounded">deploy/</code> so it ships to the roboRIO with your code; nothing has to be copied.</li>
+                <li><strong>Units</strong> — metres, metres per second, and degrees. Coordinates are <code className="font-mono bg-secondary px-1 rounded">frc-bottom-left</code>: origin at the bottom-left corner of the field.</li>
+                <li><strong>Start side</strong> — each path carries an L or R flag. It is metadata: it does not move your waypoints, it tells your robot code which side the path was drawn for so it can mirror at runtime.</li>
+                <li><strong>Mirroring</strong> — the L/R and Blue/Red toggles preview the opposite side and alliance without changing saved coordinates. Your robot code does the real mirroring when it builds the auto.</li>
+                <li><strong>No generated code</strong> — FRC autos are chosen at runtime, so nothing is generated per Auto. Your code enumerates <code className="font-mono bg-secondary px-1 rounded">autos/</code> and builds by name.</li>
+              </ul>
               <Callout color="green" title="Team workflow">
                 Commit your <code className="font-mono bg-secondary px-1 rounded">{PROJECT_FOLDER_NAME}/</code> folder to git so the whole team shares paths and autos.
               </Callout>
+            </Section>
+
+            <Section id="ftc" title="FTC Specifics" subtitle="OpModes, assets, and inches" icon={Cpu}>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm">
+                <li><strong>Project folder</strong> — <code className="font-mono bg-secondary px-1 rounded">{FTC_PROJECT_PATH}</code>. FTC has no deploy directory, so it lives in TeamCode next to your Java.</li>
+                <li><strong>Units</strong> — inches, inches per second, and degrees. Coordinates are <code className="font-mono bg-secondary px-1 rounded">pedro-center</code>: origin at the centre of the field.</li>
+                <li><strong>An OpMode per Auto</strong> — saving an Auto writes a matching Java file into <code className="font-mono bg-secondary px-1 rounded">opmodeAutos/</code>, so it appears on the Driver Station. Renaming an Auto renames the file; deleting one removes it. Files are marked <em>AUTO-GENERATED</em> — do not edit them by hand, your changes will be overwritten.</li>
+                <li><strong>Assets</strong> — a Gradle task copies the JSON into <code className="font-mono bg-secondary px-1 rounded">src/main/assets/</code> before each build, which is where the robot reads it. Build after editing, or the robot runs the previous version.</li>
+              </ul>
+              <Callout color="yellow" title="Names must differ by more than punctuation">
+                An OpMode class name strips punctuation, so <em>Nine Ball (123)</em> and <em>Nine Ball 123</em> would both become <code className="font-mono bg-secondary px-1 rounded">NineBall123Auto</code> and one Auto would be unreachable on the Driver Station. Renaming into that collision is refused.
+              </Callout>
+            </Section>
+
+            <Section id="files" title="File Format" subtitle="What your robot code reads" icon={Code2}>
+              <p>Each record is one JSON file, indented so it diffs cleanly in git. Every file carries the same envelope, so a reader never has to guess what the numbers mean:</p>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
+                <li><code className="font-mono bg-secondary px-1 rounded">schemaVersion</code> — the format version. Refuse a file newer than your parser understands rather than misreading it.</li>
+                <li><code className="font-mono bg-secondary px-1 rounded">units</code>, <code className="font-mono bg-secondary px-1 rounded">headingUnit</code>, <code className="font-mono bg-secondary px-1 rounded">speedUnit</code>, <code className="font-mono bg-secondary px-1 rounded">accelUnit</code>, <code className="font-mono bg-secondary px-1 rounded">coordinateSystem</code> — read these rather than assuming a league.</li>
+                <li><code className="font-mono bg-secondary px-1 rounded">updated_date</code> — stamped on every write.</li>
+              </ul>
+              <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Folders</h3>
+              <ul className="list-disc ml-5 space-y-1.5 text-sm">
+                <li><code className="font-mono bg-secondary px-1 rounded">paths/&lt;Name&gt;.path.json</code> — <code className="font-mono bg-secondary px-1 rounded">waypoints[]</code>, <code className="font-mono bg-secondary px-1 rounded">constraints</code>, <code className="font-mono bg-secondary px-1 rounded">subsystemTriggers[]</code>, <code className="font-mono bg-secondary px-1 rounded">rotationTargets[]</code>.</li>
+                <li><code className="font-mono bg-secondary px-1 rounded">points/&lt;Name&gt;.point.json</code> — <code className="font-mono bg-secondary px-1 rounded">x</code>, <code className="font-mono bg-secondary px-1 rounded">y</code>, <code className="font-mono bg-secondary px-1 rounded">rotation</code>.</li>
+                <li><code className="font-mono bg-secondary px-1 rounded">autos/&lt;Name&gt;.auto.json</code> — <code className="font-mono bg-secondary px-1 rounded">sequence[]</code> of slots, each with <code className="font-mono bg-secondary px-1 rounded">id</code>, <code className="font-mono bg-secondary px-1 rounded">type</code> and <code className="font-mono bg-secondary px-1 rounded">skip</code>.</li>
+              </ul>
+              <Callout color="primary" title="Constraints always hold real numbers">
+                A path that uses the project defaults still writes them out, with <code className="font-mono bg-secondary px-1 rounded">usingDefaults: true</code> recording that they were inherited. The file stands on its own — your robot code never has to know what the editor&rsquo;s defaults were.
+              </Callout>
+              <p className="text-sm mt-4">A file&rsquo;s name is derived from the record&rsquo;s name, and so is its id — which is why renaming a record retargets every Auto that referenced it, and why two records of the same kind cannot share a name.</p>
             </Section>
           </div>
         </main>

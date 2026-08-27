@@ -1456,7 +1456,12 @@ export default function AutoWorkspace() {
         )}
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Both side panels are a fixed 288px. Below roughly 900px they add up to more than
+          the window, and the field canvas — the thing you are actually editing — gets
+          squeezed to zero width and disappears with no explanation. Give the canvas a floor
+          and let the row scroll instead, so a small laptop or a split window degrades to
+          "scroll sideways" rather than "the editor is gone". */}
+      <div className="flex flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
         {/* Left: sequence panel. A click during playback only returns to edit — it must
             not also select a slot, or the path panel would populate while still in sim. */}
         <div
@@ -1531,7 +1536,7 @@ export default function AutoWorkspace() {
         </div>
 
         {/* Center: canvas + (in sim mode) playback bar */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden min-w-[360px]">
           <div className="flex-1 relative overflow-hidden min-h-0" ref={canvasContainerRef}>
             {showSimCanvas ? (
               <SimCanvas
@@ -1607,7 +1612,7 @@ export default function AutoWorkspace() {
         </div>
 
         {/* Right: waypoint / params panel — always visible */}
-        <div className="w-72 bg-card border-l border-border overflow-y-auto shrink-0 flex flex-col">
+        <div className="w-72 shrink-0 bg-card border-l border-border overflow-y-auto shrink-0 flex flex-col">
           {showSimCanvas ? (
             <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-xs text-muted-foreground/60 text-center">

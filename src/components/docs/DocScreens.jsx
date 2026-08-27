@@ -13,12 +13,12 @@ export const DOC_IMAGES = {
   constraintsPanel: `${BASE}docs/constraints-panel.png`,
   rotationTargets: `${BASE}docs/rotation-targets.png`,
   subsystemTriggers: `${BASE}docs/subsystem-triggers.png`,
-  skeletonBuilder: `${BASE}docs/skeleton-builder.png`,
-  variantAuto: `${BASE}docs/variant-auto.png`,
   robotSettings: `${BASE}docs/robot-settings.png`,
   appSettings: `${BASE}docs/app-settings.png`,
-  simulator: `${BASE}docs/simulator.png`,
   subsystemConfig: `${BASE}docs/subsystem-config.png`,
+  autoWorkspace: `${BASE}docs/auto-workspace.png`,
+  autosList: `${BASE}docs/autos-list.png`,
+  warnings: `${BASE}docs/warnings.png`,
 };
 
 export function DocScreenshot({ src, alt, caption, className = '' }) {
