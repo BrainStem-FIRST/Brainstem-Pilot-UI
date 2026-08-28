@@ -16,7 +16,7 @@ A trajectory planner for FRC/FTC robots that lets you visually build smooth Bezi
 
 ![The auto workspace: a command list on the left, the field with a live trajectory in the middle, and per-path constraints on the right.](.github/assets/auto-workspace.png)
 
-## Why BrainSTEM Pilot
+## Why BrainSTEM Pilot?
 
 **A high barrier to entry.** Autonomous pathing in FTC and FRC usually means climbing a steep learning curve — trajectory math, custom kinematics, and a rigid local toolchain to set up — before the robot moves at all.
 
@@ -37,15 +37,6 @@ BrainSTEM Pilot puts the whole loop in one visual editor: draw the path, see the
 | Footprint that changes with mechanism state | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Subsystems and commands defined in the tool | ✅ | ❌ | ✅ | ❌ | ❌ |
 | Built-in simulator or playback | ✅ | ✅ | ✅ | ✅ | ❌ |
-
-<sup>1</sup> Choreo solves a numerical optimization for a time-optimal trajectory rather than fitting Bézier curves.
-<sup>2</sup> Road Runner builds paths from quintic Hermite splines.
-<sup>3</sup> Both flip a path to the other alliance at runtime; neither mirrors across the field midline in the editor, so a left-side and right-side routine are two separate paths.
-<sup>4</sup> All three draw the robot as a fixed bumper rectangle. None of them grow or shrink the footprint as a mechanism extends.
-<sup>5</sup> Both place event markers that call *named commands* implemented in robot code; neither defines the subsystems themselves.
-<sup>6</sup> PathPlanner manages named commands and command groups in its project browser. BrainSTEM Pilot goes a step further and binds each command to a drawing, which is what lets the field view show the mechanism moving.
-<sup>7</sup> Through the Pedro PathPlanner GUI, a fork of PathPlanner maintained by the Pedro Pathing project.
-<sup>8</sup> MeepMeep, the visualizer most Road Runner teams use, is a separate community tool rather than part of Road Runner.
 
 ## What it does
 
