@@ -1,7 +1,7 @@
 {
   "name": "brainstem-pilot-ui",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -123,7 +123,7 @@
   "build": {
     "appId": "org.brainstemfirst.pilot",
     "productName": "BrainSTEM Pilot",
-    "copyright": "Copyright \u00a9 BrainSTEM FIRST",
+    "copyright": "Copyright © BrainSTEM FIRST",
     "directories": {
       "output": "release",
       "buildResources": "build"
