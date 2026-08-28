@@ -31,12 +31,12 @@ BrainSTEM Pilot puts the whole loop in one visual editor: draw the path, see the
 | Feature | ⭐ **BrainSTEM Pilot** | Choreo | PathPlanner | Pedro Pathing | Road Runner |
 | --- | :---: | :---: | :---: | :---: | :---: |
 | Cross-system (FTC & FRC) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Bézier curve drive trajectories | ✅ | ❌ <sup>1</sup> | ✅ | ✅ | ❌ <sup>2</sup> |
+| Bézier curve drive trajectories | ✅ | ❌ | ✅ | ✅ | ❌ |
 | Execution time estimates | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Editor-side mirroring (1 path → 4 paths) | ✅ | ❌ <sup>3</sup> | ❌ <sup>3</sup> | ❌ | ❌ |
-| Footprint that changes with mechanism state | ✅ | ❌ <sup>4</sup> | ❌ <sup>4</sup> | ❌ <sup>4</sup> | ❌ |
-| Subsystems and commands defined in the tool | ✅ | ❌ <sup>5</sup> | ✅ <sup>6</sup> | ❌ <sup>5</sup> | ❌ |
-| Built-in simulator or playback | ✅ | ✅ | ✅ | ✅ <sup>7</sup> | ❌ <sup>8</sup> |
+| Editor-side mirroring (1 path → 4 paths) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Footprint that changes with mechanism state | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Subsystems and commands defined in the tool | ✅ | ❌ | ✅ | ❌ | ❌ |
+| Built-in simulator or playback | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 <sup>1</sup> Choreo solves a numerical optimization for a time-optimal trajectory rather than fitting Bézier curves.
 <sup>2</sup> Road Runner builds paths from quintic Hermite splines.
