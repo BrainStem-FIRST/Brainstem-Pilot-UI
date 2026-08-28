@@ -65,7 +65,11 @@ Both run the same code and the same project files, so a folder created in one op
 
 The desktop builds are **not code-signed**, so the OS warns on first launch:
 
-- **macOS** — right-click the app and choose *Open*, or run `xattr -cr "/Applications/BrainSTEM Pilot.app"`.
+- **macOS** — after dragging it to Applications, run:
+  ```bash
+  xattr -cr "/Applications/BrainSTEM Pilot.app"
+  ```
+  Or right-click the app and choose *Open*, then *Open* again. If macOS still refuses, allow it under *System Settings → Privacy & Security*.
 - **Windows** — click *More info → Run anyway* on the SmartScreen prompt.
 
 ## Getting started

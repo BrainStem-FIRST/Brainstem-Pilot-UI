@@ -156,7 +156,8 @@
         }
       ],
       "icon": "build/icon.png",
-      "hardenedRuntime": true,
+      "identity": null,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
@@ -213,6 +214,7 @@
       "provider": "github",
       "owner": "BrainStem-FIRST",
       "repo": "Brainstem-Pilot-UI"
-    }
+    },
+    "afterPack": "electron/adhoc-sign.cjs"
   }
 }
