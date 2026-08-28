@@ -180,7 +180,7 @@ export default function AutoSimulator() {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <div className="flex items-center gap-3 pl-14 pr-4 py-2.5 bg-card border-b border-border shrink-0">
-          <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => navigate('/home')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-xs font-medium">Home</span>
           </button>
@@ -199,7 +199,7 @@ export default function AutoSimulator() {
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top bar */}
       <div className="flex items-center gap-3 pl-14 pr-4 py-2.5 bg-card border-b border-border shrink-0 flex-wrap gap-y-1">
-        <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => navigate('/home')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="w-4 h-4" />
           <span className="text-xs font-medium">Home</span>
         </button>
@@ -297,7 +297,7 @@ export default function AutoSimulator() {
             <input type="range" min={0} max={totalTime || 1} step={0.01} value={simTime}
               onChange={e => { stop(); startRef.current = null; setSimTime(parseFloat(e.target.value)); }}
               className="flex-1 accent-primary" />
-            <span className="text-xs font-mono text-muted-foreground w-24 text-right">
+            <span className="text-xs font-num text-muted-foreground w-24 text-right">
               {simTime.toFixed(2)}s / {(totalTime || 0).toFixed(2)}s
             </span>
           </div>
@@ -351,7 +351,7 @@ export default function AutoSimulator() {
           </div>
 
           {activeCmd?.type === 'subsystem' && (
-            <div className="m-3 p-3 bg-violet-500/10 border border-violet-500/30 rounded-xl shrink-0">
+            <div className="m-3 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg shrink-0">
               <div className="flex items-center gap-1.5 mb-1">
                 <Zap className="w-3.5 h-3.5 text-violet-400" />
                 <span className="text-xs font-semibold text-violet-400">Subsystem Active</span>
@@ -361,7 +361,7 @@ export default function AutoSimulator() {
             </div>
           )}
           {activeCmd?.type === 'wait' && (
-            <div className="m-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl shrink-0">
+            <div className="m-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg shrink-0">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-yellow-400" />
                 <span className="text-xs font-semibold text-yellow-400">Waiting…</span>
@@ -370,7 +370,7 @@ export default function AutoSimulator() {
             </div>
           )}
           {activeCmd?.type === 'parallel' && (
-            <div className="m-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl shrink-0">
+            <div className="m-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg shrink-0">
               <div className="flex items-center gap-1.5 mb-1">
                 <GitBranch className="w-3.5 h-3.5 text-green-400" />
                 <span className="text-xs font-semibold text-green-400">Parallel Running</span>

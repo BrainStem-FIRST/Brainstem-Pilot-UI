@@ -62,9 +62,9 @@ class ErrorBoundary extends React.Component {
 
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-card p-6 flex flex-col gap-4">
+        <div className="w-full max-w-lg rounded-lg border border-amber-500/30 bg-card p-6 flex flex-col gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -80,11 +80,11 @@ class ErrorBoundary extends React.Component {
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
               What went wrong
             </p>
-            <p className="text-xs font-mono text-foreground break-words">
+            <p className="text-xs font-num text-foreground break-words">
               {error?.message ?? String(error)}
             </p>
             {info?.componentStack && (
-              <p className="text-[11px] font-mono text-muted-foreground mt-2 break-words">
+              <p className="text-[11px] font-num text-muted-foreground mt-2 break-words">
                 in {info.componentStack.trim().split('\n')[0].trim()}
               </p>
             )}

@@ -42,7 +42,7 @@ export default function SimulationBar({ trajectory, isSimulating, simProgress, o
       />
 
       {/* Time display */}
-      <span className="text-xs font-mono text-muted-foreground w-20 text-right shrink-0">
+      <span className="text-xs font-num text-muted-foreground w-20 text-right shrink-0">
         {currentTime.toFixed(2)}s / {trajectory.totalTime.toFixed(2)}s
       </span>
     </div>

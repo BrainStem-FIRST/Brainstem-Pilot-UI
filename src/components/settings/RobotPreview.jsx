@@ -89,7 +89,7 @@ export default function RobotPreview({ settings }) {
   }, [settings]);
 
   return (
-    <div className="bg-secondary/20 rounded-xl overflow-hidden border border-border flex-shrink-0 flex flex-col">
+    <div className="bg-secondary/20 rounded-lg overflow-hidden border border-border flex-shrink-0 flex flex-col">
       <p className="text-xs text-muted-foreground font-medium px-3 pt-2 pb-1">Preview</p>
       <canvas ref={canvasRef} width={160} height={160} className="block" style={{ width: 160, height: 160 }} />
     </div>

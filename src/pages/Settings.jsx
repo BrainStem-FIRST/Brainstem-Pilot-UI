@@ -74,7 +74,7 @@ export default function Settings() {
   const handleBack = async () => {
     clearTimeout(saveTimer.current);
     if (tab === 'robot') await save();
-    navigate('/');
+    navigate('/home');
   };
 
   const update = (key, value) => {
@@ -154,7 +154,7 @@ export default function Settings() {
           )}
         </div>
 
-        <div className="flex gap-1 bg-secondary/40 rounded-xl p-1 mb-6 w-fit">
+        <div className="flex gap-1 bg-secondary/40 rounded-lg p-1 mb-6 w-fit">
           <button
             type="button"
             onClick={() => setTab('robot')}
@@ -188,7 +188,7 @@ export default function Settings() {
             const dimMin = dimUnit === 'in' ? 4 : 0.1;
             return (
               <>
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-5">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">Robot Frame Dimensions</h2>
             <div className="grid grid-cols-2 gap-4">
               <Field
@@ -208,7 +208,7 @@ export default function Settings() {
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="flex gap-4 items-stretch">
             <RobotPreview settings={settings} />
-            <div className="flex-1 bg-card border border-border rounded-xl p-5">
+            <div className="flex-1 bg-card border border-border rounded-lg p-5">
               <h2 className="text-sm font-semibold text-foreground mb-1">Motion Constraints</h2>
               <p className="text-xs text-muted-foreground mb-4">Defaults for path builder.</p>
               <div className="grid grid-cols-1 gap-4">
@@ -228,7 +228,7 @@ export default function Settings() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-xl p-5">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Subsystems / Attachments</h2>
@@ -343,7 +343,7 @@ function Field({ label, value, unit, onChange, step, min, max }) {
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="flex-1 bg-secondary/50 border border-border rounded px-2 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors"
+          className="flex-1 bg-secondary/50 border border-border rounded px-2 py-1.5 text-xs font-num text-foreground focus:outline-none focus:border-primary transition-colors"
         />
         <span className="text-xs text-muted-foreground shrink-0">{unit}</span>
       </div>

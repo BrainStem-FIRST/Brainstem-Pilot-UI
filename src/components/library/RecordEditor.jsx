@@ -21,7 +21,7 @@ function CoordField({ label, value, unit, onChange }) {
         step={0.01}
         value={Number.isFinite(value) ? parseFloat(value.toFixed(3)) : 0}
         onChange={e => onChange(parseFloat(e.target.value) || 0)}
-        className="w-24 bg-secondary/60 border border-border rounded px-2 py-1 text-sm font-mono text-foreground outline-none focus:border-primary"
+        className="w-24 bg-secondary/60 border border-border rounded px-2 py-1 text-sm font-num text-foreground outline-none focus:border-primary"
       />
     </label>
   );
@@ -152,7 +152,7 @@ export default function RecordEditor({ kind, record, onChange, onBeginEdit, onEn
           onEndEdit={onEndEdit}
         />
 
-        <div className="absolute bottom-4 left-4 rounded-xl border border-border bg-card/95 backdrop-blur-sm px-3 py-2.5">
+        <div className="absolute bottom-4 left-4 rounded-lg border border-border bg-card/95 backdrop-blur-sm px-3 py-2.5">
           {activeWaypoint ? (
             <div className="flex items-end gap-2.5">
               <CoordField label="X" unit={unit} value={activeWaypoint.x ?? 0}

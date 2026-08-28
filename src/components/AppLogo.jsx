@@ -30,10 +30,10 @@ export default function AppLogo({ className = 'w-7 h-7' }) {
  */
 export function HomeLogoLink() {
   const { pathname } = useLocation();
-  if (pathname === '/') return null;
+  if (pathname === '/' || pathname === '/home') return null;
   return (
     <Link
-      to="/"
+      to="/home"
       title="Home"
       aria-label="Home"
       className="fixed top-2.5 left-3 z-50 rounded-md opacity-90 hover:opacity-100 hover:scale-105 transition-all"

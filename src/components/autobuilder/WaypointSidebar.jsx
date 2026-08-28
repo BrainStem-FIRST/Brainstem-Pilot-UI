@@ -38,7 +38,7 @@ function AngleInput({ value, onChange, onEditStart, onEditEnd }) {
       }}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors text-right" 
+      className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-num text-foreground focus:outline-none focus:border-primary transition-colors text-right" 
     />
   );
 }
@@ -89,7 +89,7 @@ function NumberInput({ label, value, onChange, min, max, unit, decimals = 4, onE
           onChange={(e) => { if (!disabled) applyText(e.target.value); }}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          className={className ?? `flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors w-0 ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+          className={className ?? `flex-1 bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-num text-foreground focus:outline-none focus:border-primary transition-colors w-0 ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
         />
         {unit && <span className="text-xs text-muted-foreground shrink-0">{unit}</span>}
       </div>
@@ -145,7 +145,7 @@ export function OptionalParamsSection({ wp, onUpdate, initialOpen = false, optio
                         max={p.max}
                         decimals={4}
                         onEditStart={onEditStart}
-                        className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary transition-colors"
+                        className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-num text-foreground focus:outline-none focus:border-primary transition-colors"
                       />
                       {p.unit && <span className="text-[10px] text-muted-foreground">{p.unit}</span>}
                     </div>
@@ -364,12 +364,12 @@ export default function WaypointSidebar({
         <div className="px-4 py-2.5 border-b border-border shrink-0 flex items-center justify-around">
           <div className="flex flex-col items-center">
             <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Distance</span>
-            <span className="text-lg font-bold font-mono text-foreground leading-tight">{trajectory.totalLength.toFixed(2)}<span className="text-xs font-semibold text-muted-foreground ml-0.5">{motionUnits.lengthUnit}</span></span>
+            <span className="text-lg font-bold font-num text-foreground leading-tight">{trajectory.totalLength.toFixed(2)}<span className="text-xs font-semibold text-muted-foreground ml-0.5">{motionUnits.lengthUnit}</span></span>
           </div>
           <div className="w-px h-8 bg-border" />
           <div className="flex flex-col items-center">
             <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Est. Time</span>
-            <span className="text-lg font-bold font-mono text-foreground leading-tight">{trajectory.totalTime.toFixed(2)}<span className="text-xs font-semibold text-muted-foreground ml-0.5">s</span></span>
+            <span className="text-lg font-bold font-num text-foreground leading-tight">{trajectory.totalTime.toFixed(2)}<span className="text-xs font-semibold text-muted-foreground ml-0.5">s</span></span>
           </div>
         </div>
       }
@@ -500,7 +500,7 @@ export default function WaypointSidebar({
                       i === 0 ? 'bg-green-500/20 text-green-400' :
                         i === waypoints.length - 1 ? 'bg-red-500/20 text-red-400' : 'bg-primary/20 text-primary'}`
                     }>{i + 1}</span>
-                    <span className="font-mono truncate text-[10px]">
+                    <span className="font-num truncate text-[10px]">
                       {i === 0 ? 'Start' : i === waypoints.length - 1 ? 'End' : `WP ${i}`}
                       {' '}({wp.x.toFixed(1)}, {wp.y.toFixed(1)})
                     </span>
@@ -508,7 +508,7 @@ export default function WaypointSidebar({
                       <Link2 className="w-3 h-3 shrink-0 text-primary" title="Linked to previous path's end" />
                     )}
                     {(i === 0 || i === waypoints.length - 1) &&
-                      <span className="ml-auto font-mono text-[10px] shrink-0">{(wp.rotation ?? 0).toFixed(0)}°</span>}
+                      <span className="ml-auto font-num text-[10px] shrink-0">{(wp.rotation ?? 0).toFixed(0)}°</span>}
                   </div>
                 </button>
               )}

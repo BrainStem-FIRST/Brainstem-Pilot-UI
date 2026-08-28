@@ -113,7 +113,7 @@ export default function Toolbar({
       </button>
 
       <div className="ml-auto flex items-center gap-2">
-        <span className="text-xs text-muted-foreground font-mono">{waypointCount} pts</span>
+        <span className="text-xs text-muted-foreground font-num">{waypointCount} pts</span>
         <button
           title="Clear all waypoints"
           onClick={onClear}

@@ -26,7 +26,7 @@ function FolderNameDialog({ title, initial = '', confirmLabel = 'Create', onSubm
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm p-4"
     >
       <div onClick={e => e.stopPropagation()}
-        className="w-full max-w-xs rounded-xl border border-border bg-card shadow-2xl p-4 flex flex-col gap-3">
+        className="w-full max-w-xs rounded-lg border border-border bg-card shadow-2xl p-4 flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
           <FolderPlus className="w-4 h-4 text-amber-400" /> {title}
         </h2>

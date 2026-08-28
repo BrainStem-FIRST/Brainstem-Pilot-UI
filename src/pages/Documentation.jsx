@@ -221,14 +221,14 @@ export default function Documentation() {
               <ol className="list-decimal ml-5 space-y-3 text-sm">
                 <li>In your robot codebase, create the folder for your league:
                   <div className="mt-1 space-y-0.5">
-                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FRC</span> <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">{FRC_PROJECT_PATH}</code></div>
-                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FTC</span> <code className="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">{FTC_PROJECT_PATH}</code></div>
+                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FRC</span> <code className="text-xs font-num bg-secondary px-1.5 py-0.5 rounded">{FRC_PROJECT_PATH}</code></div>
+                    <div><span className="text-[10px] uppercase tracking-wider text-muted-foreground">FTC</span> <code className="text-xs font-num bg-secondary px-1.5 py-0.5 rounded">{FTC_PROJECT_PATH}</code></div>
                   </div>
                 </li>
                 <li>Open BrainSTEM Pilot → click <strong>Open Project</strong> (top-right).</li>
                 <li>Select that folder (Chrome or Edge required).</li>
-                <li>Default files are created: <code className="text-xs font-mono bg-secondary px-1 rounded">robot_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">app_settings.json</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">subsystem_config.json</code>, and the <code className="text-xs font-mono bg-secondary px-1 rounded">paths/</code>, <code className="text-xs font-mono bg-secondary px-1 rounded">points/</code> and <code className="text-xs font-mono bg-secondary px-1 rounded">autos/</code> folders as you save into them.</li>
-                <li>Opening a project from an older version migrates its <code className="text-xs font-mono bg-secondary px-1 rounded">skeletons/</code> and <code className="text-xs font-mono bg-secondary px-1 rounded">variants/</code> into <code className="text-xs font-mono bg-secondary px-1 rounded">autos/</code>, then moves the originals to <code className="text-xs font-mono bg-secondary px-1 rounded">legacy/</code>. Nothing reads them after that; delete the folder once the autos look right.</li>
+                <li>Default files are created: <code className="text-xs font-num bg-secondary px-1 rounded">robot_settings.json</code>, <code className="text-xs font-num bg-secondary px-1 rounded">app_settings.json</code>, <code className="text-xs font-num bg-secondary px-1 rounded">subsystem_config.json</code>, and the <code className="text-xs font-num bg-secondary px-1 rounded">paths/</code>, <code className="text-xs font-num bg-secondary px-1 rounded">points/</code> and <code className="text-xs font-num bg-secondary px-1 rounded">autos/</code> folders as you save into them.</li>
+                <li>Opening a project from an older version migrates its <code className="text-xs font-num bg-secondary px-1 rounded">skeletons/</code> and <code className="text-xs font-num bg-secondary px-1 rounded">variants/</code> into <code className="text-xs font-num bg-secondary px-1 rounded">autos/</code>, then moves the originals to <code className="text-xs font-num bg-secondary px-1 rounded">legacy/</code>. Nothing reads them after that; delete the folder once the autos look right.</li>
               </ol>
               <h3 className="text-sm font-bold text-foreground mt-8 mb-2">Settings</h3>
               <p className="text-sm">
@@ -239,7 +239,7 @@ export default function Documentation() {
                   <strong>Robot Settings</strong> — your robot’s frame size, default max velocity and acceleration, and physical subsystem attachments drawn on the robot icon in the path editor. New paths inherit these motion defaults until you override them per path.
                 </li>
                 <li>
-                  <strong>App Settings</strong> — which season field image to use across the app. This updates the background in the path editor, path list previews, and simulator. Pick the field that matches your current game; the choice is saved in your project folder as <code className="text-xs font-mono bg-secondary px-1 rounded">app_settings.json</code>.
+                  <strong>App Settings</strong> — which season field image to use across the app. This updates the background in the path editor, path list previews, and simulator. Pick the field that matches your current game; the choice is saved in your project folder as <code className="text-xs font-num bg-secondary px-1 rounded">app_settings.json</code>.
                 </li>
               </ul>
               <Callout title="First step after opening" color="green">
@@ -310,7 +310,7 @@ export default function Documentation() {
                 {OPTIONAL_PARAMS.map(p => (
                   <div key={p.key} className="rounded-xl border border-border bg-card/50 p-4">
                     <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <code className="text-xs font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">{p.key}</code>
+                      <code className="text-xs font-num text-primary bg-primary/10 px-1.5 py-0.5 rounded">{p.key}</code>
                       <span className="text-sm font-semibold text-foreground">{p.label}</span>
                       <span className="text-[10px] text-muted-foreground ml-auto">
                         default: {String(p.default)}{p.unit ? ` (${p.unit})` : ''}
@@ -366,14 +366,14 @@ export default function Documentation() {
             </Section>
 
             <Section id="autos" title="Autos & the Sequence" subtitle="One Auto, one file, one ordered list" icon={Layers}>
-              <p>An Auto is a single ordered <strong>sequence</strong> of slots, saved as one self-contained file in <code className="font-mono bg-secondary px-1 rounded">autos/</code>. There is no separate template to keep in sync — what you see in the list is what runs.</p>
+              <p>An Auto is a single ordered <strong>sequence</strong> of slots, saved as one self-contained file in <code className="font-num bg-secondary px-1 rounded">autos/</code>. There is no separate template to keep in sync — what you see in the list is what runs.</p>
               <DocScreenshot
                 src={DOC_IMAGES.autoWorkspace}
                 alt="Auto workspace with a sequence of path, point, subsystem and wait slots"
                 caption="Auto workspace — the sequence on the left, the field in the middle, and the selected slot's settings on the right."
               />
               <Callout color="violet" title="Replaces skeletons and variants">
-                Older versions split an Auto into a shared <em>skeleton</em> of commands plus a <em>variant</em> of per-command overrides. That is gone. Opening an old project migrates it automatically and files the originals under <code className="font-mono bg-secondary px-1 rounded">legacy/</code>.
+                Older versions split an Auto into a shared <em>skeleton</em> of commands plus a <em>variant</em> of per-command overrides. That is gone. Opening an old project migrates it automatically and files the originals under <code className="font-num bg-secondary px-1 rounded">legacy/</code>.
               </Callout>
               <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Slot types</h3>
               <ul className="list-disc ml-5 space-y-1.5 text-sm">
@@ -444,7 +444,7 @@ export default function Documentation() {
               />
               <p className="mt-4">Use <strong>New Folder</strong> in the Auto list or the Path &amp; Point Index to group records. Move a record with the folder dropdown on its card; the last option creates a new folder and files it there in one step.</p>
               <Callout color="primary" title="Folders are labels, not directories">
-                Every record stays in its own flat file under <code className="font-mono bg-secondary px-1 rounded">autos/</code>, <code className="font-mono bg-secondary px-1 rounded">paths/</code> or <code className="font-mono bg-secondary px-1 rounded">points/</code> and simply carries a <code className="font-mono bg-secondary px-1 rounded">folder</code> name. Nothing your robot code reads has to change, and moving a record is one field, not a file move.
+                Every record stays in its own flat file under <code className="font-num bg-secondary px-1 rounded">autos/</code>, <code className="font-num bg-secondary px-1 rounded">paths/</code> or <code className="font-num bg-secondary px-1 rounded">points/</code> and simply carries a <code className="font-num bg-secondary px-1 rounded">folder</code> name. Nothing your robot code reads has to change, and moving a record is one field, not a file move.
               </Callout>
               <p className="text-sm mt-3">Deleting a folder moves its contents to <strong>Unfiled</strong>; it never deletes records. Searching narrows within folders rather than flattening them.</p>
             </Section>
@@ -473,44 +473,44 @@ export default function Documentation() {
 
             <Section id="frc" title="FRC Specifics" subtitle="What differs on the FRC side" icon={Cpu}>
               <ul className="list-disc ml-5 space-y-1.5 text-sm">
-                <li><strong>Project folder</strong> — <code className="font-mono bg-secondary px-1 rounded">{FRC_PROJECT_PATH}</code>. It sits inside <code className="font-mono bg-secondary px-1 rounded">deploy/</code> so it ships to the roboRIO with your code; nothing has to be copied.</li>
-                <li><strong>Units</strong> — metres, metres per second, and degrees. Coordinates are <code className="font-mono bg-secondary px-1 rounded">frc-bottom-left</code>: origin at the bottom-left corner of the field.</li>
+                <li><strong>Project folder</strong> — <code className="font-num bg-secondary px-1 rounded">{FRC_PROJECT_PATH}</code>. It sits inside <code className="font-num bg-secondary px-1 rounded">deploy/</code> so it ships to the roboRIO with your code; nothing has to be copied.</li>
+                <li><strong>Units</strong> — metres, metres per second, and degrees. Coordinates are <code className="font-num bg-secondary px-1 rounded">frc-bottom-left</code>: origin at the bottom-left corner of the field.</li>
                 <li><strong>Start side</strong> — each path carries an L or R flag. It is metadata: it does not move your waypoints, it tells your robot code which side the path was drawn for so it can mirror at runtime.</li>
                 <li><strong>Mirroring</strong> — the L/R and Blue/Red toggles preview the opposite side and alliance without changing saved coordinates. Your robot code does the real mirroring when it builds the auto.</li>
-                <li><strong>No generated code</strong> — FRC autos are chosen at runtime, so nothing is generated per Auto. Your code enumerates <code className="font-mono bg-secondary px-1 rounded">autos/</code> and builds by name.</li>
+                <li><strong>No generated code</strong> — FRC autos are chosen at runtime, so nothing is generated per Auto. Your code enumerates <code className="font-num bg-secondary px-1 rounded">autos/</code> and builds by name.</li>
               </ul>
               <Callout color="green" title="Team workflow">
-                Commit your <code className="font-mono bg-secondary px-1 rounded">{PROJECT_FOLDER_NAME}/</code> folder to git so the whole team shares paths and autos.
+                Commit your <code className="font-num bg-secondary px-1 rounded">{PROJECT_FOLDER_NAME}/</code> folder to git so the whole team shares paths and autos.
               </Callout>
             </Section>
 
             <Section id="ftc" title="FTC Specifics" subtitle="OpModes, assets, and inches" icon={Cpu}>
               <ul className="list-disc ml-5 space-y-1.5 text-sm">
-                <li><strong>Project folder</strong> — <code className="font-mono bg-secondary px-1 rounded">{FTC_PROJECT_PATH}</code>. FTC has no deploy directory, so it lives in TeamCode next to your Java.</li>
-                <li><strong>Units</strong> — inches, inches per second, and degrees. Coordinates are <code className="font-mono bg-secondary px-1 rounded">pedro-center</code>: origin at the centre of the field.</li>
-                <li><strong>An OpMode per Auto</strong> — saving an Auto writes a matching Java file into <code className="font-mono bg-secondary px-1 rounded">opmodeAutos/</code>, so it appears on the Driver Station. Renaming an Auto renames the file; deleting one removes it. Files are marked <em>AUTO-GENERATED</em> — do not edit them by hand, your changes will be overwritten.</li>
-                <li><strong>Assets</strong> — a Gradle task copies the JSON into <code className="font-mono bg-secondary px-1 rounded">src/main/assets/</code> before each build, which is where the robot reads it. Build after editing, or the robot runs the previous version.</li>
+                <li><strong>Project folder</strong> — <code className="font-num bg-secondary px-1 rounded">{FTC_PROJECT_PATH}</code>. FTC has no deploy directory, so it lives in TeamCode next to your Java.</li>
+                <li><strong>Units</strong> — inches, inches per second, and degrees. Coordinates are <code className="font-num bg-secondary px-1 rounded">pedro-center</code>: origin at the centre of the field.</li>
+                <li><strong>An OpMode per Auto</strong> — saving an Auto writes a matching Java file into <code className="font-num bg-secondary px-1 rounded">opmodeAutos/</code>, so it appears on the Driver Station. Renaming an Auto renames the file; deleting one removes it. Files are marked <em>AUTO-GENERATED</em> — do not edit them by hand, your changes will be overwritten.</li>
+                <li><strong>Assets</strong> — a Gradle task copies the JSON into <code className="font-num bg-secondary px-1 rounded">src/main/assets/</code> before each build, which is where the robot reads it. Build after editing, or the robot runs the previous version.</li>
               </ul>
               <Callout color="yellow" title="Names must differ by more than punctuation">
-                An OpMode class name strips punctuation, so <em>Nine Ball (123)</em> and <em>Nine Ball 123</em> would both become <code className="font-mono bg-secondary px-1 rounded">NineBall123Auto</code> and one Auto would be unreachable on the Driver Station. Renaming into that collision is refused.
+                An OpMode class name strips punctuation, so <em>Nine Ball (123)</em> and <em>Nine Ball 123</em> would both become <code className="font-num bg-secondary px-1 rounded">NineBall123Auto</code> and one Auto would be unreachable on the Driver Station. Renaming into that collision is refused.
               </Callout>
             </Section>
 
             <Section id="files" title="File Format" subtitle="What your robot code reads" icon={Code2}>
               <p>Each record is one JSON file, indented so it diffs cleanly in git. Every file carries the same envelope, so a reader never has to guess what the numbers mean:</p>
               <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
-                <li><code className="font-mono bg-secondary px-1 rounded">schemaVersion</code> — the format version. Refuse a file newer than your parser understands rather than misreading it.</li>
-                <li><code className="font-mono bg-secondary px-1 rounded">units</code>, <code className="font-mono bg-secondary px-1 rounded">headingUnit</code>, <code className="font-mono bg-secondary px-1 rounded">speedUnit</code>, <code className="font-mono bg-secondary px-1 rounded">accelUnit</code>, <code className="font-mono bg-secondary px-1 rounded">coordinateSystem</code> — read these rather than assuming a league.</li>
-                <li><code className="font-mono bg-secondary px-1 rounded">updated_date</code> — stamped on every write.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">schemaVersion</code> — the format version. Refuse a file newer than your parser understands rather than misreading it.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">units</code>, <code className="font-num bg-secondary px-1 rounded">headingUnit</code>, <code className="font-num bg-secondary px-1 rounded">speedUnit</code>, <code className="font-num bg-secondary px-1 rounded">accelUnit</code>, <code className="font-num bg-secondary px-1 rounded">coordinateSystem</code> — read these rather than assuming a league.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">updated_date</code> — stamped on every write.</li>
               </ul>
               <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Folders</h3>
               <ul className="list-disc ml-5 space-y-1.5 text-sm">
-                <li><code className="font-mono bg-secondary px-1 rounded">paths/&lt;Name&gt;.path.json</code> — <code className="font-mono bg-secondary px-1 rounded">waypoints[]</code>, <code className="font-mono bg-secondary px-1 rounded">constraints</code>, <code className="font-mono bg-secondary px-1 rounded">subsystemTriggers[]</code>, <code className="font-mono bg-secondary px-1 rounded">rotationTargets[]</code>.</li>
-                <li><code className="font-mono bg-secondary px-1 rounded">points/&lt;Name&gt;.point.json</code> — <code className="font-mono bg-secondary px-1 rounded">x</code>, <code className="font-mono bg-secondary px-1 rounded">y</code>, <code className="font-mono bg-secondary px-1 rounded">rotation</code>.</li>
-                <li><code className="font-mono bg-secondary px-1 rounded">autos/&lt;Name&gt;.auto.json</code> — <code className="font-mono bg-secondary px-1 rounded">sequence[]</code> of slots, each with <code className="font-mono bg-secondary px-1 rounded">id</code>, <code className="font-mono bg-secondary px-1 rounded">type</code> and <code className="font-mono bg-secondary px-1 rounded">skip</code>.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">paths/&lt;Name&gt;.path.json</code> — <code className="font-num bg-secondary px-1 rounded">waypoints[]</code>, <code className="font-num bg-secondary px-1 rounded">constraints</code>, <code className="font-num bg-secondary px-1 rounded">subsystemTriggers[]</code>, <code className="font-num bg-secondary px-1 rounded">rotationTargets[]</code>.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">points/&lt;Name&gt;.point.json</code> — <code className="font-num bg-secondary px-1 rounded">x</code>, <code className="font-num bg-secondary px-1 rounded">y</code>, <code className="font-num bg-secondary px-1 rounded">rotation</code>.</li>
+                <li><code className="font-num bg-secondary px-1 rounded">autos/&lt;Name&gt;.auto.json</code> — <code className="font-num bg-secondary px-1 rounded">sequence[]</code> of slots, each with <code className="font-num bg-secondary px-1 rounded">id</code>, <code className="font-num bg-secondary px-1 rounded">type</code> and <code className="font-num bg-secondary px-1 rounded">skip</code>.</li>
               </ul>
               <Callout color="primary" title="Constraints always hold real numbers">
-                A path that uses the project defaults still writes them out, with <code className="font-mono bg-secondary px-1 rounded">usingDefaults: true</code> recording that they were inherited. The file stands on its own — your robot code never has to know what the editor&rsquo;s defaults were.
+                A path that uses the project defaults still writes them out, with <code className="font-num bg-secondary px-1 rounded">usingDefaults: true</code> recording that they were inherited. The file stands on its own — your robot code never has to know what the editor&rsquo;s defaults were.
               </Callout>
               <p className="text-sm mt-4">A file&rsquo;s name is derived from the record&rsquo;s name, and so is its id — which is why renaming a record retargets every Auto that referenced it, and why two records of the same kind cannot share a name.</p>
             </Section>

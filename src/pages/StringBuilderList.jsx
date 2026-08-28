@@ -211,7 +211,6 @@ export default function StringBuilderList() {
   return (
     <div className="min-h-screen bg-background flex flex-col p-6 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-violet-500/5 rounded-full blur-3xl" />
         <svg className="absolute inset-0 w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
           <defs><pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" /></pattern></defs>
           <rect width="100%" height="100%" fill="url(#grid2)" />
@@ -220,7 +219,7 @@ export default function StringBuilderList() {
 
       <div className="relative max-w-5xl mx-auto w-full">
         <div className="flex items-center gap-4 mb-8 pl-10">
-          <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => navigate('/home')} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Home</span>
           </button>
@@ -232,22 +231,22 @@ export default function StringBuilderList() {
             <Library className="w-4 h-4" /> Path &amp; Point Index
           </button>
           <NewFolderButton onCreate={createFolder} />
-          <button onClick={createAuto} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
+          <button onClick={createAuto} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-semibold hover:bg-accent transition-colors">
             <Plus className="w-4 h-4" /> New Auto
           </button>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-border border-t-primary rounded-full animate-spin" />
           </div>
         ) : autos.length === 0 && availableFolders.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-              <Layers className="w-8 h-8 text-violet-400/60" />
+            <div className="w-14 h-14 rounded-lg bg-secondary flex items-center justify-center">
+              <Layers className="w-7 h-7 text-muted-foreground" />
             </div>
             <p className="text-muted-foreground text-sm">No autos yet. Create one to get started.</p>
-            <button onClick={createAuto} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-500 transition-all">
+            <button onClick={createAuto} className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-semibold hover:bg-accent transition-colors">
               <Plus className="w-4 h-4" /> Create Auto
             </button>
           </motion.div>
@@ -275,14 +274,14 @@ export default function StringBuilderList() {
               return (
                 <motion.div key={aId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                   onClick={() => renamingId !== aId && navigate(`/auto-workspace/${aId}`)}
-                  className="group cursor-pointer rounded-xl bg-card border border-violet-500/20 hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10 transition-all overflow-hidden">
-                  <div className="relative w-full aspect-[280/130] bg-[#0d1117] border-b border-violet-500/20 overflow-hidden">
+                  className="group cursor-pointer surface-interactive overflow-hidden">
+                  <div className="relative w-full aspect-[280/130] bg-[hsl(var(--field-bg))] border-b border-border overflow-hidden">
                     <AutoPreview sequence={auto.sequence} paths={allPaths} points={allPoints} constraints={motionUnits.defaultConstraints} />
                   </div>
                   <div className="p-4">
                     <div className="flex items-start gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                        <Layers className="w-4 h-4 text-violet-400" />
+                      <div className="w-8 h-8 rounded-md bg-secondary flex items-center justify-center shrink-0">
+                        <Layers className="w-4 h-4 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
                         {renamingId === aId ? (

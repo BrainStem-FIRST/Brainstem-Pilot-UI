@@ -180,7 +180,7 @@ function UsageChips({ autos, onOpen }) {
 
 function RecordCard({ accent, thumbnail, name, onRename, meta, usage, onDelete, onEdit, folderPicker }) {
   return (
-    <div className={`rounded-xl bg-card border ${accent} overflow-hidden flex flex-col group`}>
+    <div className={`rounded-lg bg-card border ${accent} overflow-hidden flex flex-col group`}>
       <button onClick={onEdit} title="Edit on the field"
         className="relative aspect-[2/1] bg-[#0d1117] border-b border-border/60 overflow-hidden block w-full text-left">
         {thumbnail}
@@ -194,7 +194,7 @@ function RecordCard({ accent, thumbnail, name, onRename, meta, usage, onDelete, 
         <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
             <NameField name={name} onCommit={onRename} />
-            <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{meta}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 font-num">{meta}</p>
           </div>
           {folderPicker}
           <button onClick={onDelete} title="Delete (also removes its JSON file)"
@@ -366,7 +366,7 @@ export default function LibraryIndex() {
     <div className="min-h-screen bg-background flex flex-col p-6">
       <div className="max-w-6xl mx-auto w-full flex flex-col flex-1 min-h-0">
         <div className="flex items-center gap-4 mb-6 flex-wrap pl-10">
-          <Link to="/" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+          <Link to="/home" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Home</span>
           </Link>
@@ -415,7 +415,7 @@ export default function LibraryIndex() {
           </div>
         ) : visible.length === 0 && availableFolders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-secondary/60 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-lg bg-secondary/60 flex items-center justify-center">
               {tab === 'paths' ? <Route className="w-6 h-6 text-blue-400/60" /> : <MapPin className="w-6 h-6 text-cyan-400/60" />}
             </div>
             <p className="text-sm text-muted-foreground">

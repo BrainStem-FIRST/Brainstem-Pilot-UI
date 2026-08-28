@@ -43,7 +43,7 @@ export default function SubsystemConfigPage() {
   const handleBack = async () => {
     clearTimeout(saveTimer.current);
     await save(subsystems);
-    navigate('/');
+    navigate('/home');
   };
 
   const updateSubsystems = (next) => {
@@ -110,7 +110,7 @@ export default function SubsystemConfigPage() {
           </p>
 
           {subsystems.length === 0 && (
-            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl text-muted-foreground/50">
+            <div className="text-center py-16 border-2 border-dashed border-border rounded-lg text-muted-foreground/50">
               <Zap className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p className="text-sm">No subsystems yet</p>
               <p className="text-xs mt-1">Add your first subsystem below</p>
@@ -119,7 +119,7 @@ export default function SubsystemConfigPage() {
 
           {subsystems.map((sys, i) => (
             <motion.div key={sys.id ?? i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              className="bg-card border border-border rounded-xl overflow-hidden">
+              className="bg-card border border-border rounded-lg overflow-hidden">
               {/* Subsystem header */}
               <div className="flex items-center gap-3 p-4 cursor-pointer hover:bg-secondary/20 transition-colors"
                 onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
@@ -220,7 +220,7 @@ export default function SubsystemConfigPage() {
           ))}
 
           <button onClick={addSubsystem}
-            className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-border rounded-xl text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-all">
+            className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-all">
             <Plus className="w-4 h-4" /> Add Subsystem
           </button>
         </div>

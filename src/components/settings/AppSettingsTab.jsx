@@ -10,7 +10,7 @@ function LeagueBadge() {
   const label = projectType === 'ftc' ? 'FTC' : 'FRC';
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 mb-6">
+    <div className="bg-card border border-border rounded-lg p-5 mb-6">
       <div className="flex items-center gap-2 mb-1">
         <h2 className="text-sm font-semibold text-foreground">Project League</h2>
         {!canChangeLeague && hasProjectDir() && (
@@ -39,7 +39,7 @@ export default function AppSettingsTab() {
   return (
     <div>
       <LeagueBadge />
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="bg-card border border-border rounded-lg p-5">
         <h2 className="text-sm font-semibold text-foreground mb-1">Field Image</h2>
         <p className="text-xs text-muted-foreground mb-4">
           Choose which season field to use in the path editor, path previews, and simulator.
@@ -54,7 +54,7 @@ export default function AppSettingsTab() {
                 key={field.id}
                 type="button"
                 onClick={() => setSelectedFieldId(field.id)}
-                className={`text-left rounded-xl border overflow-hidden transition-all ${
+                className={`text-left rounded-lg border overflow-hidden transition-all ${
                   selected
                     ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
                     : 'border-border bg-secondary/20 hover:border-primary/40'

@@ -214,7 +214,7 @@ function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, on
       {isDropTarget && <div className="h-0.5 mx-1 mb-1.5 rounded-full bg-primary" />}
       <div
         onClick={() => onSelect(slot.id)}
-        className={`rounded-xl border bg-card transition-all cursor-pointer ${meta.border} ${
+        className={`rounded-lg border bg-card transition-all cursor-pointer ${meta.border} ${
           isSelected ? 'ring-2 ring-primary/50' : ''
         } ${isActive ? 'bg-primary/10 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]' : ''} ${slot.skip ? 'opacity-40' : ''} ${isDragging ? 'shadow-xl opacity-40' : ''}`}
       >
@@ -247,7 +247,7 @@ function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, on
           </div>
           <IssueBadge issues={issues} />
           {duration != null && (
-            <span className={`text-[10px] font-mono shrink-0 ${isActive ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>{duration.toFixed(1)}s</span>
+            <span className={`text-[10px] font-num shrink-0 ${isActive ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>{duration.toFixed(1)}s</span>
           )}
           <button onClick={e => { e.stopPropagation(); onToggleSkip(slot.id); }}
             title={slot.skip ? 'Skipped' : 'Skip'}
@@ -264,7 +264,7 @@ function SlotCard({ slot, isSelected, isActive, duration, onSelect, onDelete, on
             <span className="text-xs text-muted-foreground">Duration:</span>
             <input type="number" value={slot.duration ?? 0} step={0.1} min={0}
               onChange={e => onUpdate(slot.id, { duration: parseFloat(e.target.value) || 0 })}
-              className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground outline-none focus:border-primary" />
+              className="w-16 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-num text-foreground outline-none focus:border-primary" />
             <span className="text-xs text-muted-foreground">s</span>
           </div>
         )}
@@ -312,7 +312,7 @@ function ParallelEditor({ slot, onUpdate, subsystems }) {
               <span className="text-[10px] text-yellow-400 font-semibold">Wait</span>
               <input type="number" value={sub.defaultWait ?? 0} step={0.1} min={0}
                 onChange={e => updateSub(i, { defaultWait: parseFloat(e.target.value) || 0 })}
-                className="w-14 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-mono text-foreground outline-none" />
+                className="w-14 bg-secondary/50 border border-border rounded px-1.5 py-0.5 text-xs font-num text-foreground outline-none" />
               <span className="text-[10px] text-muted-foreground">s</span>
               <button onClick={() => removeSub(i)} className="ml-auto text-destructive/50 hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
             </div>
@@ -375,13 +375,13 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
               <label className="text-xs text-muted-foreground font-medium">X</label>
               <input type="number" value={parseFloat((point.x ?? 0).toFixed(3))} step={0.01}
                 onChange={e => onUpdatePoint({ x: parseFloat(e.target.value) || 0 })}
-                className="bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground outline-none focus:border-primary" />
+                className="bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-num text-foreground outline-none focus:border-primary" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground font-medium">Y</label>
               <input type="number" value={parseFloat((point.y ?? 0).toFixed(3))} step={0.01}
                 onChange={e => onUpdatePoint({ y: parseFloat(e.target.value) || 0 })}
-                className="bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-mono text-foreground outline-none focus:border-primary" />
+                className="bg-secondary/50 border border-border rounded px-2 py-1 text-xs font-num text-foreground outline-none focus:border-primary" />
             </div>
           </div>
         )}
@@ -392,7 +392,7 @@ function PointSlotPanel({ slot, point, onUpdateSlot, onUpdatePoint, subsystems, 
               onMouseDown={() => onEditStart?.()} onMouseUp={() => onEditEnd?.()}
               onChange={e => onUpdatePoint({ rotation: -parseFloat(e.target.value) })}
               className="flex-1 accent-primary" />
-            <span className="text-xs font-mono text-foreground w-10 text-right">{Math.round(point?.rotation ?? 0)}°</span>
+            <span className="text-xs font-num text-foreground w-10 text-right">{Math.round(point?.rotation ?? 0)}°</span>
           </div>
         </div>
       </div>
@@ -1501,7 +1501,7 @@ export default function AutoWorkspace() {
             className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5"
           >
             {(auto.sequence ?? []).length === 0 && (
-              <div className="text-center py-10 text-muted-foreground/50 border-2 border-dashed border-border rounded-xl">
+              <div className="text-center py-10 text-muted-foreground/50 border-2 border-dashed border-border rounded-lg">
                 <p className="text-xs">No slots yet</p>
                 <p className="text-[10px] mt-1">Add a Path or Point to get started</p>
               </div>
@@ -1605,7 +1605,7 @@ export default function AutoWorkspace() {
                 setSimTime(parseFloat(e.target.value));
               }}
               className="flex-1 accent-primary disabled:opacity-30" />
-            <span className="text-xs font-mono text-muted-foreground w-24 text-right">
+            <span className="text-xs font-num text-muted-foreground w-24 text-right">
               {simTime.toFixed(2)}s / {(totalTime || 0).toFixed(2)}s
             </span>
           </div>
