@@ -76,14 +76,20 @@ The desktop builds are **not code-signed**, so the OS warns on first launch:
 
 1. In your FRC/FTC codebase, create a folder: `deploy/brainstemPilotAuto/` in FRC or just `brainstemPilotAuto` in FTC.
 2. Open the app, pick **FRC** or **FTC** (top-right), then click **Open project**. On the web this requires Chrome or Edge (it uses the File System Access API); the desktop app works anywhere.
-3. Select that folder. Three files are created for you — `robot_settings.json`, `app_settings.json`, `subsystem_config.json` — and `paths/`, `points/` and `autos/` appear as you save your first of each.
+3. Select that folder. Three files are created for you — `robot_settings.json`, `app_settings.json`, `subsystem_config.json` — and `paths/`, `points/` and `autos/` appear as you save your first of each. On FTC, `PilotAutoBase.java` is also created once in that folder (the UI will not overwrite it after that).
 4. Open **Settings**:
    - **Robot Settings** — set frame width/length, default max velocity/acceleration, and physical subsystem attachments. New paths inherit these until overridden.
    - **App Settings** — pick the season field image used across the path editor, path previews, and simulator.
 5. (Optional) Open **Configure Subsystems** to define mechanisms and their commands, and bind each to a drawing, before adding subsystem triggers to a path.
 6. From the home screen, open **Build an Auto** and hit **New Auto**. Inside the workspace, add paths, points, waits, subsystem commands and parallel groups to the sequence, draw each path on the field, and press **Play** to watch the whole routine.
 7. Use the **Path & Point Index** to rename, move or delete a saved path or point — every auto that references it follows along.
-8. Commit `deploy/brainstemPilotAuto/` to git so the whole team shares paths and autos. On FTC projects, commit the generated `opmodeAutos/` Java files alongside them.
+8. Commit `deploy/brainstemPilotAuto/` to git so the whole team shares paths and autos. On FTC projects, commit the generated `opmodeAutos/` Java files and your edited `PilotAutoBase.java` alongside them.
+
+### FTC robot library
+
+Robot code that follows those JSON files lives in [`libraries/ftc`](libraries/ftc) (`org.brainstemfirst:pilot-ftc`). Teams add the published artifact with Gradle; do not `includeBuild` the library into a robot project.
+
+Opening an FTC project (or saving an Auto) creates `PilotAutoBase.java` in the project folder if it is missing. Generated OpModes extend that class. Edit it to construct your robot, implement `PilotDrive`, and call `PilotRegistry.addCommand(...)` — the UI will not overwrite it. See [`libraries/ftc/README.md`](libraries/ftc/README.md).
 
 The in-app **Documentation** page (linked top-left) covers the path editor, waypoints/Bezier curves, optional per-waypoint parameters, rotation targets, subsystem triggers, and the auto workspace in more detail, with screenshots.
 

@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.library' version '8.7.0'
+    id 'maven-publish'
+}
+
+group = 'org.brainstemfirst'
+version = '0.1.0-SNAPSHOT'
+
+android {
+    namespace 'org.brainstemfirst.pilot.ftc'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    publishing {
+        singleVariant('release')
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+    maven { url = 'https://maven.brott.dev/' }
+}
+
+dependencies {
+    compileOnly 'org.firstinspires.ftc:RobotCore:11.0.0'
+    compileOnly 'org.firstinspires.ftc:Hardware:11.0.0'
+
+    api 'com.acmerobotics.roadrunner:core:1.0.1'
+    api 'com.acmerobotics.roadrunner:actions:1.0.1'
+    api('com.acmerobotics.roadrunner:ftc:0.1.25') {
+        exclude group: 'org.firstinspires.ftc'
+    }
+    api('com.acmerobotics.dashboard:dashboard:0.5.1') {
+        exclude group: 'org.firstinspires.ftc'
+    }
+
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.13.5'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.5'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.13.5'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'org.brainstemfirst'
+                artifactId = 'pilot-ftc'
+                version = project.version
+            }
+        }
+        repositories {
+            mavenLocal()
+        }
+    }
+}

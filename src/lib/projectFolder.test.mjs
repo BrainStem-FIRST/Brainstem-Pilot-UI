@@ -184,8 +184,25 @@ export async function runPersistenceChecks({ league = 'ftc' } = {}) {
       check('FTC OpMode generated for the auto', opmode != null, Object.keys(after).join(', '));
       check('OpMode points at the auto id', (opmode ?? '').includes('super("Nine_Ball")'));
       check('OpMode is marked generated', (opmode ?? '').includes('AUTO-GENERATED'));
+      check('OpMode extends team PilotAutoBase',
+        (opmode ?? '').includes('org.firstinspires.ftc.teamcode.brainstemPilotAuto.PilotAutoBase'));
+      const teamBase = after['PilotAutoBase.java'];
+      check('PilotAutoBase created in project root', teamBase != null, Object.keys(after).join(', '));
+      check('PilotAutoBase is team-owned', (teamBase ?? '').includes('will not overwrite'));
+      check('PilotAutoBase seeds BezierFollowerConfig',
+        (teamBase ?? '').includes('BezierFollowerConfig.velKv'));
+      const teamFile = root._entries.get('PilotAutoBase.java');
+      teamFile._contents = '// TEAM EDIT KEPT';
+      await saveAutoToProject({
+        id: 'Nine_Ball',
+        name: 'Nine Ball',
+        sequence: autoJson.sequence,
+      }, null);
+      check('PilotAutoBase is not overwritten on later saves',
+        snapshot(root)['PilotAutoBase.java'] === '// TEAM EDIT KEPT');
     } else {
       check('no OpMode generated outside FTC', opmode == null);
+      check('no PilotAutoBase generated outside FTC', after['PilotAutoBase.java'] == null);
     }
 
     const loadedAutos = await loadAutosFromProject();

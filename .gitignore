@@ -30,5 +30,8 @@ dist-ssr
 .env
 .vite
 
-# electron-builder output
-release
+# Gradle (FTC library under libraries/ftc)
+libraries/ftc/.gradle/
+libraries/ftc/build/
+libraries/ftc/local.properties
+
