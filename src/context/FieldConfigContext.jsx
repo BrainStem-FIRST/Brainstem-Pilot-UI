@@ -14,7 +14,7 @@ import { useLeague } from './LeagueContext';
 const FieldConfigContext = createContext(null);
 
 export function FieldConfigProvider({ children }) {
-  const { projectType, loadedFromProject } = useLeague();
+  const { projectType, loadedFromProject, projectRevision } = useLeague();
   const [selectedFieldId, setSelectedFieldIdState] = useState(() => getDefaultFieldId('frc'));
   const [loaded, setLoaded] = useState(false);
   const userChangedRef = useRef(false);
@@ -29,6 +29,7 @@ export function FieldConfigProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false;
+    userChangedRef.current = false;
     readEntity('AppSettings').then(data => {
       if (cancelled || userChangedRef.current) {
         if (!cancelled) setLoaded(true);
@@ -49,7 +50,7 @@ export function FieldConfigProvider({ children }) {
       if (!cancelled) setLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [projectType]);
+  }, [projectType, projectRevision]);
 
   const activeField = useMemo(
     () => resolveField(selectedFieldId, projectType),

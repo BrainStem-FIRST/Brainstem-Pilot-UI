@@ -1,26 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FolderOpen } from 'lucide-react';
-import { getProjectDir, setProjectDir, hasProjectDir, initializeProjectFolder } from '../lib/projectFolder';
-import { clearTabs } from '../lib/workspaceTabs';
+import { hasProjectDir } from '../lib/projectFolder';
+import { pickAndBindProject } from '../lib/openProject';
 import { projectFolderPath } from '../lib/projectLocation';
 import { useLeague } from '../context/LeagueContext';
 import AppLogo from '../components/AppLogo';
 
 const MEDIA = import.meta.env.BASE_URL + 'media/';
-
-/**
- * Is `handle` the project that is already open? Prefers `isSameEntry` (exact, even for two
- * folders with the same name); falls back to the last-opened folder name on a cold start,
- * where there is no previous handle to compare against.
- */
-async function isSameProject(handle) {
-  const previous = getProjectDir();
-  if (previous) {
-    try { return await previous.isSameEntry(handle); } catch { return false; }
-  }
-  try { return localStorage.getItem('lastProjectFolder') === handle.name; } catch { return false; }
-}
 
 /**
  * The clip for whichever league is selected. Keyed on the league so switching remounts the
@@ -80,31 +67,10 @@ export default function Welcome() {
   }, [navigate]);
 
   const openProject = async () => {
-    if (!window.showDirectoryPicker) {
-      alert('Your browser does not support the File System Access API. Please use Chrome or Edge, or install the desktop app.');
-      return;
-    }
     setOpening(true);
     try {
-      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      // Open tabs name Autos by a slug that only resolves inside one project, so switching
-      // projects has to close them. Reopening the *same* folder keeps them.
-      if (!(await isSameProject(dirHandle))) clearTabs();
-      setProjectDir(dirHandle);
-      await initializeProjectFolder(projectType);
-      await loadLeagueFromProject();
-      try {
-        localStorage.setItem('lastProjectFolder', dirHandle.name);
-      } catch (e) {
-        // localStorage unavailable; that's ok
-      }
-      navigate('/home', { replace: true });
-    } catch (err) {
-      if (err.name === 'SecurityError') {
-        // Silently ignore — only works when the app is opened in a standalone browser tab
-      } else if (err.name !== 'AbortError') {
-        throw err;
-      }
+      const dirHandle = await pickAndBindProject({ projectType, loadLeagueFromProject });
+      if (dirHandle) navigate('/home', { replace: true });
     } finally {
       setOpening(false);
     }

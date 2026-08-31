@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Route, Layers, Cpu, Settings2, ArrowRight, FolderCheck } from 'lucide-react';
+import { Route, Layers, Cpu, Settings2, ArrowRight, FolderCheck, ChevronDown } from 'lucide-react';
 import { getProjectDir, hasProjectDir } from '../lib/projectFolder';
+import { pickAndBindProject } from '../lib/openProject';
 import { projectFolderPath } from '../lib/projectLocation';
 import { useLeague } from '../context/LeagueContext';
 import AppLogo from '../components/AppLogo';
@@ -76,19 +77,39 @@ function DestinationCard({ icon: Icon, title, blurb, href, fill, accent }) {
 
 export default function Home() {
   const [projectName, setProjectName] = useState(null);
-  const { projectType } = useLeague();
+  const [opening, setOpening] = useState(false);
+  const { projectType, loadLeagueFromProject } = useLeague();
 
   useEffect(() => {
     if (hasProjectDir()) setProjectName(getProjectDir().name);
   }, []);
 
+  const changeProject = async () => {
+    setOpening(true);
+    try {
+      const dirHandle = await pickAndBindProject({ projectType, loadLeagueFromProject });
+      if (dirHandle) setProjectName(dirHandle.name);
+    } finally {
+      setOpening(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="flex items-center gap-3 px-5 h-14 border-b border-border shrink-0">
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+        <button
+          type="button"
+          onClick={changeProject}
+          disabled={opening}
+          title="Change project folder"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 max-w-[320px]
+                     rounded-md px-1.5 py-1 -ml-1.5 hover:text-foreground hover:bg-secondary
+                     transition-colors disabled:opacity-60"
+        >
           <FolderCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="max-w-[260px] truncate">{projectName ?? 'Project'}</span>
-        </span>
+          <span className="truncate">{opening ? 'Opening…' : (projectName ?? 'Project')}</span>
+          <ChevronDown className="w-3 h-3 shrink-0 opacity-50" />
+        </button>
         <div className="flex-1" />
         <span className="px-2 py-1 rounded border border-border text-[11px] font-semibold text-muted-foreground">
           {projectType.toUpperCase()}

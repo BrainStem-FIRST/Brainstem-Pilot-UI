@@ -176,8 +176,11 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
   const waypointVelocities = planWaypointVelocities(processedWaypoints, waypointArcLengths, maxVel, maxAccel);
   const startRotation = processedWaypoints[0].rotation;
   const nSeg = segments.length;
+  const hasPathLength = totalLength > 1e-9;
 
-  // 6. Sample each leg with linear + heading trapezoids; duration is the slower of the two
+  // 6. Sample each leg. Heading follows path progress (rotation targets and, with none,
+  // start→end over the whole path). Duration is max(drive, turn) so a large heading change
+  // on a short path still takes time; the drive is stretched to keep those headings on time.
   const states = [];
   const samplePeriodS = 0.02;
   let globalTime = 0;
@@ -194,16 +197,20 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
     legMaxV = Math.max(legMaxV, v0, v1);
 
     const linearMotion = planLegTiming(legLength, v0, v1, legMaxV, maxAccel);
-    const startProgress = totalLength > 1e-9 ? sStart / totalLength : i / nSeg;
-    const endProgress = totalLength > 1e-9 ? sEnd / totalLength : (i + 1) / nSeg;
-    const startH = hasUserRotationTargets
+    const startProgress = hasPathLength ? sStart / totalLength : i / nSeg;
+    const endProgress = hasPathLength ? sEnd / totalLength : (i + 1) / nSeg;
+
+    const startH = hasPathLength || hasUserRotationTargets
       ? sampleLookAheadHeading(startRotation, processedRotations, startProgress)
       : (processedWaypoints[i].rotation ?? 0);
-    const endH = hasUserRotationTargets
+    const endH = hasPathLength || hasUserRotationTargets
       ? sampleLookAheadHeading(startRotation, processedRotations, endProgress)
       : (processedWaypoints[i + 1].rotation ?? 0);
-    const headingDelta = shortestAngleDelta(startH, endH);
-    const headingMotion = planHeadingTiming(Math.abs(headingDelta), maxOmegaDeg, maxAlphaDeg);
+
+    const headingTravel = hasPathLength || hasUserRotationTargets
+      ? headingTravelAlong(startRotation, processedRotations, startProgress, endProgress)
+      : Math.abs(shortestAngleDelta(startH, endH));
+    const headingMotion = planHeadingTiming(headingTravel, maxOmegaDeg, maxAlphaDeg);
     const legDuration = Math.max(linearMotion.totalTime, headingMotion.totalTime);
 
     if (legDuration <= 0) {
@@ -221,25 +228,36 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
       continue;
     }
 
-    const headingSign = headingDelta >= 0 ? 1 : -1;
+    const headingSign = shortestAngleDelta(startH, endH) >= 0 ? 1 : -1;
+    const timeScale = linearMotion.totalTime > 0 ? linearMotion.totalTime / legDuration : 0;
     const legSamples = Math.ceil(legDuration / samplePeriodS);
 
     for (let step = 0; step <= legSamples; step++) {
       if (i > 0 && step === 0) continue;
       const t = Math.min(step * samplePeriodS, legDuration);
-      const { dist: legDist, vel } = linearMotion.totalTime > 0
-        ? linearMotion.eval(Math.min(t, linearMotion.totalTime))
+      const { dist: legDist, vel: linearVel } = linearMotion.totalTime > 0
+        ? linearMotion.eval(t * timeScale)
         : { dist: 0, vel: 0 };
       const distanceCovered = sStart + legDist;
       const spatialPose = interpolatePoseAtDistance(pathPoints, distanceCovered);
 
       let currentHeading;
-      if (headingMotion.totalTime > 0) {
+      if (hasPathLength) {
+        currentHeading = sampleLookAheadHeading(
+          startRotation,
+          processedRotations,
+          distanceCovered / totalLength,
+        );
+      } else if (hasUserRotationTargets) {
+        const u = t / legDuration;
+        currentHeading = sampleLookAheadHeading(
+          startRotation,
+          processedRotations,
+          startProgress + (endProgress - startProgress) * u,
+        );
+      } else if (headingMotion.totalTime > 0) {
         const { dist: headingDist } = headingMotion.eval(Math.min(t, headingMotion.totalTime));
         currentHeading = normAngle(startH + headingSign * headingDist);
-      } else if (hasUserRotationTargets) {
-        const globalProgress = distanceCovered / (totalLength || 1);
-        currentHeading = sampleLookAheadHeading(startRotation, processedRotations, globalProgress);
       } else {
         currentHeading = startH;
       }
@@ -248,7 +266,7 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
         time: globalTime + t,
         x: spatialPose.x,
         y: spatialPose.y,
-        velocity: vel,
+        velocity: linearVel * timeScale,
         heading: currentHeading,
         pathHeading: spatialPose.pathHeading,
       });
@@ -537,6 +555,24 @@ function interpolatePoseAtDistance(points, distance) {
     y: lerp(pStart.y, pEnd.y, ratio),
     pathHeading: lerpAngle(pStart.heading, pEnd.heading, ratio)
   };
+}
+
+/** Sum of shortest-turn magnitudes along rotation targets between two path-progress values. */
+function headingTravelAlong(startHeading, rotationTargets, pStart, pEnd) {
+  if (pEnd <= pStart) return 0;
+  const sorted = [...(rotationTargets ?? [])].sort((a, b) => a.progress - b.progress);
+  let travel = 0;
+  let prev = sampleLookAheadHeading(startHeading, rotationTargets, pStart);
+  for (const rot of sorted) {
+    const p = rot.progress ?? 0;
+    if (p <= pStart) continue;
+    if (p >= pEnd) break;
+    const next = rot.rotation ?? 0;
+    travel += Math.abs(shortestAngleDelta(prev, next));
+    prev = next;
+  }
+  travel += Math.abs(shortestAngleDelta(prev, sampleLookAheadHeading(startHeading, rotationTargets, pEnd)));
+  return travel;
 }
 
 function sampleLookAheadHeading(startHeading, rotationTargets, globalProgress) {

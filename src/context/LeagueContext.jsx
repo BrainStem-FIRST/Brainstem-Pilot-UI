@@ -25,6 +25,7 @@ const LeagueContext = createContext(null);
 export function LeagueProvider({ children }) {
   const [projectType, setProjectTypeState] = useState(readStoredPreference);
   const [loadedFromProject, setLoadedFromProject] = useState(false);
+  const [projectRevision, setProjectRevision] = useState(0);
 
   const canChangeLeague = !hasProjectDir();
 
@@ -48,6 +49,7 @@ export function LeagueProvider({ children }) {
       setProjectTypeState('frc');
     }
     setLoadedFromProject(true);
+    setProjectRevision(n => n + 1);
   }, []);
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export function LeagueProvider({ children }) {
     canChangeLeague,
     loadLeagueFromProject,
     loadedFromProject,
+    projectRevision,
     isFrc: projectType === 'frc',
     isFtc: projectType === 'ftc',
   };
