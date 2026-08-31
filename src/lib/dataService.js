@@ -49,11 +49,32 @@ function writeLocalEntity(entityType, data) {
 
 function makeRecord(data) {
   return {
-    id: `gen-${Date.now()}`,
+    id: data.id || `gen-${Date.now()}`,
     created_date: new Date().toISOString(),
     updated_date: new Date().toISOString(),
     ...data,
   };
+}
+
+function allocateUniqueName(baseName, existing = []) {
+  const taken = new Set();
+  for (const r of existing) {
+    if (r.id) taken.add(String(r.id));
+    const slug = safeNameFromString(r.name);
+    if (slug) taken.add(slug);
+  }
+  let name = (baseName && String(baseName).trim()) || 'Untitled';
+  let id = safeNameFromString(name);
+  if (!id) {
+    name = `Untitled_${Date.now()}`;
+    id = safeNameFromString(name);
+  }
+  if (!taken.has(id)) return { name, id };
+  const stem = name;
+  let n = 1;
+  while (taken.has(safeNameFromString(`${stem}_${n}`))) n++;
+  name = `${stem}_${n}`;
+  return { name, id: safeNameFromString(name) };
 }
 
 function getStoredLeaguePreference() {
@@ -249,34 +270,37 @@ export async function createEntity(entityType, data) {
 
   if (folder) {
     if (entityType === 'SavedAuto') {
-      const id = safeNameFromString(data.name) || `gen-${Date.now()}`;
+      const { name, id } = allocateUniqueName(data.name, await readSavedAutos());
       const record = {
-        id,
         created_date: new Date().toISOString(),
         updated_date: new Date().toISOString(),
         ...data,
+        name,
+        id,
       };
       await savePathToProject(record, null);
       return record;
     }
     if (entityType === 'Point') {
-      const id = safeNameFromString(data.name) || `gen-${Date.now()}`;
+      const { name, id } = allocateUniqueName(data.name, await readPoints());
       const record = {
-        id,
         created_date: new Date().toISOString(),
         updated_date: new Date().toISOString(),
         ...data,
+        name,
+        id,
       };
       await savePointToProject(record, null);
       return record;
     }
     if (entityType === 'Auto') {
-      const id = safeNameFromString(data.name) || `gen-${Date.now()}`;
+      const { name, id } = allocateUniqueName(data.name, await readAutos());
       const record = {
-        id,
         created_date: new Date().toISOString(),
         updated_date: new Date().toISOString(),
         ...data,
+        name,
+        id,
       };
       await saveAutoToProject(record, null);
       return record;
@@ -291,6 +315,10 @@ export async function createEntity(entityType, data) {
       updated_date: new Date().toISOString(),
       ...data,
     };
+  }
+  if (entityType === 'Auto' || entityType === 'SavedAuto' || entityType === 'Point') {
+    const { name, id } = allocateUniqueName(data.name || entityType, []);
+    return makeRecord({ ...data, name, id });
   }
   return makeRecord(data);
 }

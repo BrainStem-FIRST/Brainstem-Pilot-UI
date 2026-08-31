@@ -126,9 +126,16 @@ export default function StringBuilderList() {
 
   /** `baseName`, or the first `baseName_N` that no existing Auto already slugs to. */
   const uniqueCopyName = (baseName) => {
+    const items = autosRef.current;
     let uniqueName = baseName;
     let counter = 1;
-    while (autos.some(item => safeId(item.name) === safeId(uniqueName))) {
+    const taken = (candidate) => {
+      const slug = safeId(candidate);
+      return items.some(item =>
+        safeId(item.name) === slug || String(item.id) === slug || String(item._id ?? '') === slug
+      );
+    };
+    while (taken(uniqueName)) {
       uniqueName = `${baseName}_${counter}`;
       counter++;
     }
@@ -139,10 +146,12 @@ export default function StringBuilderList() {
     const name = uniqueCopyName('Auto');
     try {
       const created = await createEntity('Auto', { name, sequence: [] });
-      const recordId = created?.id ?? safeId(name);
+      setAutos(prev => [created, ...prev]);
+      const recordId = created?.id ?? safeId(created?.name ?? name);
       navigate(`/auto-workspace/${recordId}`);
     } catch (err) {
-      navigate(`/auto-workspace/gen-${Date.now()}`);
+      const fallbackName = uniqueCopyName(`Auto ${Date.now()}`);
+      navigate(`/auto-workspace/${safeId(fallbackName)}`);
     }
   };
 

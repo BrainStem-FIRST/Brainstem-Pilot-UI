@@ -60,11 +60,33 @@ function normalizeAuto(auto) {
   };
 }
 
+function nameTaken(records, candidate) {
+  const slug = safeId(candidate);
+  return (records ?? []).some(r => safeId(r.name) === slug || String(r.id) === slug);
+}
+
 /** First `${prefix} N` that no existing record already claims, so we never clobber a file. */
 function nextAvailableName(prefix, records) {
   let n = (records?.length ?? 0) + 1;
-  while ((records ?? []).some(r => safeId(r.name) === safeId(`${prefix} ${n}`))) n++;
+  while (nameTaken(records, `${prefix} ${n}`)) n++;
   return `${prefix} ${n}`;
+}
+
+function uniqueFallbackAuto(urlId, list) {
+  const records = list ?? [];
+  const isGeneric = !urlId || safeId(urlId) === 'New_Auto' || urlId === 'New Auto';
+  const preferredName = isGeneric
+    ? nextAvailableName('Auto', records)
+    : (String(urlId).startsWith('gen-')
+      ? `Auto ${String(urlId).slice(4)}`
+      : String(urlId).replace(/_/g, ' '));
+  let name = preferredName;
+  let n = 1;
+  while (nameTaken(records, name)) {
+    name = `${preferredName}_${n}`;
+    n++;
+  }
+  return normalizeAuto({ id: safeId(name), name, sequence: [] });
 }
 
 // Native HTML5 drag-and-drop (not a library) — each button is draggable and reports its
@@ -547,7 +569,7 @@ export default function AutoWorkspace() {
     Promise.all([readEntity('Auto'), refreshShared()]).then(([autos]) => {
       const list = Array.isArray(autos) ? autos : [];
       const found = list.find(a => a.id === id) ?? list.find(a => safeId(a.name) === id);
-      const record = normalizeAuto(found ?? { id, name: 'New Auto', sequence: [] });
+      const record = found ? normalizeAuto(found) : uniqueFallbackAuto(id, list);
       allAutosRef.current = list.map(normalizeAuto);
       setAuto(record);
       // Name *every* open tab, not just the one being opened. A tab restored from storage

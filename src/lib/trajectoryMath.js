@@ -41,6 +41,7 @@ export function chainPathToPose(waypoints, startPose) {
  */
 export function generateTrajectory(waypoints, constraints, rotationTargets = [], isRedAlliance = false) {
   if (!waypoints || waypoints.length < 2) return null;
+  const hasUserRotationTargets = rotationTargets.length > 0;
 
   // 1. Create a deep working copy of the raw Blue configurations first
   let processedWaypoints = waypoints.map(wp => ({
@@ -170,15 +171,18 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
   // 5. Plan per-waypoint speeds (minLinearSpeed is independent of passPosition)
   const maxVel = constraints.maxVel ?? 3.0;
   const maxAccel = constraints.maxAccel ?? 2.5;
+  const { maxOmegaDeg, maxAlphaDeg } = headingRateLimits(constraints);
   const waypointArcLengths = computeWaypointArcLengths(segments, samplesPerSegment);
   const waypointVelocities = planWaypointVelocities(processedWaypoints, waypointArcLengths, maxVel, maxAccel);
+  const startRotation = processedWaypoints[0].rotation;
+  const nSeg = segments.length;
 
-  // 6. Sample each leg with its own trapezoidal profile
+  // 6. Sample each leg with linear + heading trapezoids; duration is the slower of the two
   const states = [];
   const samplePeriodS = 0.02;
   let globalTime = 0;
 
-  for (let i = 0; i < segments.length; i++) {
+  for (let i = 0; i < nSeg; i++) {
     const sStart = waypointArcLengths[i];
     const sEnd = waypointArcLengths[i + 1];
     const legLength = sEnd - sStart;
@@ -189,20 +193,59 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
     if (endParams.maxLinearSpeed != null) legMaxV = Math.min(legMaxV, endParams.maxLinearSpeed);
     legMaxV = Math.max(legMaxV, v0, v1);
 
-    const legMotion = planLegTiming(legLength, v0, v1, legMaxV, maxAccel);
-    const legSamples = Math.ceil(legMotion.totalTime / samplePeriodS);
+    const linearMotion = planLegTiming(legLength, v0, v1, legMaxV, maxAccel);
+    const startProgress = totalLength > 1e-9 ? sStart / totalLength : i / nSeg;
+    const endProgress = totalLength > 1e-9 ? sEnd / totalLength : (i + 1) / nSeg;
+    const startH = hasUserRotationTargets
+      ? sampleLookAheadHeading(startRotation, processedRotations, startProgress)
+      : (processedWaypoints[i].rotation ?? 0);
+    const endH = hasUserRotationTargets
+      ? sampleLookAheadHeading(startRotation, processedRotations, endProgress)
+      : (processedWaypoints[i + 1].rotation ?? 0);
+    const headingDelta = shortestAngleDelta(startH, endH);
+    const headingMotion = planHeadingTiming(Math.abs(headingDelta), maxOmegaDeg, maxAlphaDeg);
+    const legDuration = Math.max(linearMotion.totalTime, headingMotion.totalTime);
+
+    if (legDuration <= 0) {
+      if (states.length === 0) {
+        const spatialPose = interpolatePoseAtDistance(pathPoints, sStart);
+        states.push({
+          time: globalTime,
+          x: spatialPose.x,
+          y: spatialPose.y,
+          velocity: 0,
+          heading: startH,
+          pathHeading: spatialPose.pathHeading,
+        });
+      }
+      continue;
+    }
+
+    const headingSign = headingDelta >= 0 ? 1 : -1;
+    const legSamples = Math.ceil(legDuration / samplePeriodS);
 
     for (let step = 0; step <= legSamples; step++) {
       if (i > 0 && step === 0) continue;
-      const legTime = Math.min(step * samplePeriodS, legMotion.totalTime);
-      const { dist: legDist, vel } = legMotion.eval(legTime);
+      const t = Math.min(step * samplePeriodS, legDuration);
+      const { dist: legDist, vel } = linearMotion.totalTime > 0
+        ? linearMotion.eval(Math.min(t, linearMotion.totalTime))
+        : { dist: 0, vel: 0 };
       const distanceCovered = sStart + legDist;
       const spatialPose = interpolatePoseAtDistance(pathPoints, distanceCovered);
-      const globalProgress = distanceCovered / (totalLength || 1);
-      const currentHeading = sampleLookAheadHeading(processedWaypoints[0].rotation, processedRotations, globalProgress);
+
+      let currentHeading;
+      if (headingMotion.totalTime > 0) {
+        const { dist: headingDist } = headingMotion.eval(Math.min(t, headingMotion.totalTime));
+        currentHeading = normAngle(startH + headingSign * headingDist);
+      } else if (hasUserRotationTargets) {
+        const globalProgress = distanceCovered / (totalLength || 1);
+        currentHeading = sampleLookAheadHeading(startRotation, processedRotations, globalProgress);
+      } else {
+        currentHeading = startH;
+      }
 
       states.push({
-        time: globalTime + legTime,
+        time: globalTime + t,
         x: spatialPose.x,
         y: spatialPose.y,
         velocity: vel,
@@ -210,7 +253,7 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
         pathHeading: spatialPose.pathHeading,
       });
     }
-    globalTime += legMotion.totalTime;
+    globalTime += legDuration;
   }
 
   const totalTime = globalTime;
@@ -295,6 +338,29 @@ function planWaypointVelocities(waypoints, arcLengths, maxVel, maxAccel) {
   }
 
   return velocities;
+}
+
+function headingRateLimits(constraints) {
+  const maxVel = constraints.maxVel ?? 3.0;
+  const maxAccel = constraints.maxAccel ?? 2.5;
+  const maxTurnPower = constraints.maxTurnPower ?? 1;
+  const radius = maxVel >= 10 ? 9 : 0.4;
+  const toDeg = 180 / Math.PI;
+  const maxOmegaDeg = Math.max(30, (maxVel / radius) * toDeg * maxTurnPower);
+  const maxAlphaDeg = Math.max(1e-6, (maxAccel / radius) * toDeg * maxTurnPower);
+  return { maxOmegaDeg, maxAlphaDeg };
+}
+
+/** Trapezoid from 0 to |delta| deg with start/end omega 0; same structure as planLegTiming. */
+function planHeadingTiming(deltaDeg, maxOmega, maxAlpha) {
+  const L = Math.abs(deltaDeg);
+  if (L < 0.5) {
+    return {
+      totalTime: 0,
+      eval: () => ({ dist: 0, vel: 0 }),
+    };
+  }
+  return planLegTiming(L, 0, 0, maxOmega, maxAlpha);
 }
 
 /** Trapezoidal/triangular motion for one path leg with non-zero start/end speeds. */
@@ -496,6 +562,10 @@ function sampleLookAheadHeading(startHeading, rotationTargets, globalProgress) {
 
 function trueMod(n, m) {
   return ((n % m) + m) % m;
+}
+
+function shortestAngleDelta(fromDeg, toDeg) {
+  return trueMod(toDeg - fromDeg + 180, 360) - 180;
 }
 
 export function flipStartSide(side) {
