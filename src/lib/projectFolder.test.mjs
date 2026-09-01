@@ -139,7 +139,7 @@ export async function runPersistenceChecks({ league = 'ftc' } = {}) {
     check('path declares units', pathJson.units === expect.units, `got ${pathJson.units}`);
     check('path declares coordinateSystem',
       pathJson.coordinateSystem === expect.coordinateSystem, `got ${pathJson.coordinateSystem}`);
-    check('path stamps updated_date', typeof pathJson.updated_date === 'string');
+    check('path does not write updated_date', pathJson.updated_date === undefined);
     check('constraints resolved to real numbers',
       pathJson.constraints?.maxVel === expect.maxVel && pathJson.constraints?.maxAccel === expect.maxAccel,
       JSON.stringify(pathJson.constraints));
@@ -177,7 +177,7 @@ export async function runPersistenceChecks({ league = 'ftc' } = {}) {
     const autoJson = JSON.parse(after['autos/Nine_Ball.auto.json'] ?? '{}');
     check('auto declares units', autoJson.units === expect.units, `got ${autoJson.units}`);
     check('auto keeps its sequence', autoJson.sequence?.length === 2);
-    check('auto stamps updated_date', typeof autoJson.updated_date === 'string');
+    check('auto does not write updated_date', autoJson.updated_date === undefined);
 
     const opmode = after['opmodeAutos/NineBallAuto.java'];
     if (league === 'ftc') {
@@ -249,6 +249,33 @@ export async function runPersistenceChecks({ league = 'ftc' } = {}) {
     check('legacy/ explains itself', (migrated['legacy/README.md'] ?? '').includes('Safe to delete'));
     check('original variants/ folder cleared',
       migrated['variants/Trench.variant.json'] == null, 'stale copy still present');
+
+    // ── 7. Opening a project strips leftover updated_date without rewriting clean files ──
+    const datedRoot = makeDir('dated-project');
+    setProjectDir(datedRoot);
+    await saveAppSettingsToProject({ projectType: league, selectedFieldId: 'decode_2026' });
+    const autosDir = await datedRoot.getDirectoryHandle('autos', { create: true });
+    const dated = await autosDir.getFileHandle('Dated.auto.json', { create: true });
+    w = await dated.createWritable();
+    await w.write(JSON.stringify({
+      name: 'Dated',
+      sequence: [],
+      updated_date: '2026-01-01T00:00:00.000Z',
+    }, null, 2));
+    await w.close();
+    const clean = await autosDir.getFileHandle('Clean.auto.json', { create: true });
+    w = await clean.createWritable();
+    const cleanBody = JSON.stringify({ name: 'Clean', sequence: [] }, null, 2);
+    await w.write(cleanBody);
+    await w.close();
+
+    await initializeProjectFolder(league);
+    const stripped = snapshot(datedRoot);
+    const datedJson = JSON.parse(stripped['autos/Dated.auto.json'] ?? '{}');
+    check('open strips updated_date from existing files', datedJson.updated_date === undefined);
+    check('open keeps the rest of a stripped file', datedJson.name === 'Dated');
+    check('open does not rewrite files that already lack updated_date',
+      stripped['autos/Clean.auto.json'] === cleanBody);
   } finally {
     setProjectDir(previousDir);
   }

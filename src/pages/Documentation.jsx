@@ -502,7 +502,6 @@ export default function Documentation() {
               <ul className="list-disc ml-5 space-y-1.5 text-sm mt-3">
                 <li><code className="font-num bg-secondary px-1 rounded">schemaVersion</code> — the format version. Refuse a file newer than your parser understands rather than misreading it.</li>
                 <li><code className="font-num bg-secondary px-1 rounded">units</code>, <code className="font-num bg-secondary px-1 rounded">headingUnit</code>, <code className="font-num bg-secondary px-1 rounded">speedUnit</code>, <code className="font-num bg-secondary px-1 rounded">accelUnit</code>, <code className="font-num bg-secondary px-1 rounded">coordinateSystem</code> — read these rather than assuming a league.</li>
-                <li><code className="font-num bg-secondary px-1 rounded">updated_date</code> — stamped on every write.</li>
               </ul>
               <h3 className="text-sm font-bold text-foreground mt-6 mb-2">Folders</h3>
               <ul className="list-disc ml-5 space-y-1.5 text-sm">

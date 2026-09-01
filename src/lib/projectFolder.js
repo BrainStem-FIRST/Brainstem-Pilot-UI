@@ -43,19 +43,26 @@ async function projectLeague() {
 }
 
 /**
- * Every record the app writes carries the same envelope: what format it is, what units its
- * numbers are in, and when it was last written. Previously only paths declared units, so a
- * reader of points/ or autos/ had to guess inches vs metres — and `updated_date` only moved
- * on some of the write paths, which made it worse than absent.
+ * Every record the app writes carries the same envelope: what format it is and what units
+ * its numbers are in. Previously only paths declared units, so a reader of points/ or autos/
+ * had to guess inches vs metres.
+ *
+ * `updated_date` is never written: it changed on every save even when the record did not,
+ * which dirtied git diffs. In-memory copies may still carry it; drop it before serializing.
  */
+function omitUpdatedDate(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
+  const { updated_date: _ignored, ...rest } = record;
+  return rest;
+}
+
 async function stampRecord(record, league) {
   const resolved = league ?? (await projectLeague());
-  return {
+  return omitUpdatedDate({
     schemaVersion: PILOT_SCHEMA_VERSION,
     ...record,
     ...getPathExportMetadata(resolved),
-    updated_date: new Date().toISOString(),
-  };
+  });
 }
 
 /** File/id slug: spaces become underscores; display names keep spaces. */
@@ -159,7 +166,7 @@ export async function saveSkeletonToProject(skeletonObj, previousName) {
   }
   const fh = await dir.getFileHandle(`${safeName}.skeleton.json`, { create: true });
   const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(skeletonObj, null, 2));
+  await writable.write(JSON.stringify(omitUpdatedDate(skeletonObj), null, 2));
   await writable.close();
 }
 
@@ -174,7 +181,7 @@ export async function saveVariantToProject(variantObj, previousName) {
   }
   const fh = await dir.getFileHandle(`${safeName}.variant.json`, { create: true });
   const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(variantObj, null, 2));
+  await writable.write(JSON.stringify(omitUpdatedDate(variantObj), null, 2));
   await writable.close();
   await syncFtcOpmodeAuto(variantObj, previousName);
 }
@@ -372,7 +379,7 @@ export async function saveSettingsToProject(settingsObj) {
   if (!_dirHandle) return;
   const fh = await _dirHandle.getFileHandle('robot_settings.json', { create: true });
   const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(settingsObj, null, 2));
+  await writable.write(JSON.stringify(omitUpdatedDate(settingsObj), null, 2));
   await writable.close();
 }
 
@@ -380,7 +387,7 @@ export async function saveSubsystemConfigToProject(configObj) {
   if (!_dirHandle) return;
   const fh = await _dirHandle.getFileHandle('subsystem_config.json', { create: true });
   const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(configObj, null, 2));
+  await writable.write(JSON.stringify(omitUpdatedDate(configObj), null, 2));
   await writable.close();
 }
 
@@ -388,7 +395,7 @@ export async function saveAppSettingsToProject(settingsObj) {
   if (!_dirHandle) return;
   const fh = await _dirHandle.getFileHandle('app_settings.json', { create: true });
   const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(settingsObj, null, 2));
+  await writable.write(JSON.stringify(omitUpdatedDate(settingsObj), null, 2));
   await writable.close();
 }
 
@@ -508,9 +515,39 @@ export async function initializeProjectFolder(projectType = 'frc') {
     });
   }
   await migrateLegacyAutosIfNeeded();
+  await stripUpdatedDateFromProjectFiles();
   if (league === 'ftc') {
     await syncAllFtcOpmodeAutos();
   } else {
     await purgeFtcOpmodesWhenNotFtc();
+  }
+}
+
+/**
+ * One-time (and thereafter a no-op) cleanup: drop `updated_date` from JSON already on disk.
+ * Rewrites only files that still have the key, so opening a current project is a no-op.
+ */
+async function stripUpdatedDateFromProjectFiles() {
+  if (!_dirHandle) return;
+  await stripUpdatedDateInDir(_dirHandle);
+}
+
+async function stripUpdatedDateInDir(dir) {
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'directory') {
+      await stripUpdatedDateInDir(entry);
+      continue;
+    }
+    if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(await (await entry.getFile()).text());
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !('updated_date' in parsed)) continue;
+    const writable = await entry.createWritable();
+    await writable.write(JSON.stringify(omitUpdatedDate(parsed), null, 2));
+    await writable.close();
   }
 }
