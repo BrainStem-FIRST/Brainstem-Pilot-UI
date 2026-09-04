@@ -35,7 +35,10 @@ dependencies {
     compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 }
 
-def vendorRepo = layout.projectDirectory.dir('repo')
+// GitHub Pages serves public/ as the site root, so this is
+// https://brainstem-first.github.io/Brainstem-Pilot-UI/frc-maven
+def pagesMaven = layout.projectDirectory.dir('../../public/frc-maven')
+def localVendorRepo = layout.projectDirectory.dir('repo')
 
 publishing {
     publications {
@@ -48,8 +51,12 @@ publishing {
     }
     repositories {
         maven {
+            name = 'pagesMaven'
+            url = pagesMaven
+        }
+        maven {
             name = 'vendorRepo'
-            url = vendorRepo
+            url = localVendorRepo
         }
     }
 }

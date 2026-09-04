@@ -19,19 +19,17 @@ Do **not** add a Gradle `implementation` line. Install it the same way as PathPl
 https://brainstem-first.github.io/Brainstem-Pilot-UI/vendordeps/BrainstemPilot.json
 ```
 
-That copies the vendordep into `vendordeps/` and GradleRIO pulls `pilot-frc` from the URL in `mavenUrls`. This URL is served by GitHub Pages after the file is on `master`; it will 404 until then.
+That copies the vendordep into `vendordeps/` and GradleRIO pulls `pilot-frc` from GitHub Pages (`…/frc-maven`). Pushing to `master` publishes both the JSON and the jar via the Pages workflow.
 
-### Offline (from this repo)
+### Local library iteration
 
-**WPILib: Manage Vendor Libraries** → **Install new libraries (offline)** and select `libraries/frc/BrainstemPilot.json`.
-
-Offline install still needs the Maven artifacts. From this directory:
+From this directory:
 
 ```bash
-./gradlew publish
+./gradlew publish -Dorg.gradle.java.home="$HOME/wpilib/2026/jdk"
 ```
 
-That writes a Maven repo to `libraries/frc/repo`. Point `mavenUrls` in your project's `vendordeps/BrainstemPilot.json` at that folder if you are iterating on the library locally, for example:
+That writes Maven artifacts to `libraries/frc/repo` (and `public/frc-maven`). A robot project next to this repo can use:
 
 ```json
 "mavenUrls": [
