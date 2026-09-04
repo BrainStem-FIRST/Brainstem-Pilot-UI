@@ -1,0 +1,9 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url = 'https://frcmaven.wpi.edu/artifactory/release' }
+    }
+}
+
+rootProject.name = 'pilot-frc'

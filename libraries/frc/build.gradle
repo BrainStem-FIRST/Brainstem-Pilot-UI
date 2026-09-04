@@ -1,0 +1,50 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'org.brainstemfirst'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://frcmaven.wpi.edu/artifactory/release' }
+    maven {
+        url = "${System.getProperty('user.home')}/wpilib/2026/maven"
+    }
+}
+
+def wpilibVersion = '2026.2.1'
+
+dependencies {
+    compileOnly "edu.wpi.first.wpilibj:wpilibj-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.wpimath:wpimath-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.wpilibNewCommands:wpilibNewCommands-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.wpiutil:wpiutil-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.wpiunits:wpiunits-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.ntcore:ntcore-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.hal:hal-java:${wpilibVersion}"
+    compileOnly "edu.wpi.first.wpinet:wpinet-java:${wpilibVersion}"
+
+    api 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            groupId = 'org.brainstemfirst'
+            artifactId = 'pilot-frc'
+            version = project.version
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}
