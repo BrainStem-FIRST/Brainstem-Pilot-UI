@@ -26,6 +26,10 @@ jobs:
       - name: Publish FRC vendor Maven repo
         working-directory: libraries/frc
         run: ./gradlew publish --no-daemon
+      - uses: android-actions/setup-android@v3
+      - name: Publish FTC Maven repo
+        working-directory: libraries/ftc
+        run: ./gradlew publish --no-daemon
       - uses: actions/setup-node@v4
         with:
           node-version: 20

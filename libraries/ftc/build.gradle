@@ -61,6 +61,10 @@ afterEvaluate {
         }
         repositories {
             mavenLocal()
+            maven {
+                name = 'pagesMaven'
+                url = layout.projectDirectory.dir('../../public/maven')
+            }
         }
     }
 }

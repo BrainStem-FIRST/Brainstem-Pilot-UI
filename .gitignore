@@ -35,6 +35,7 @@ libraries/ftc/.gradle/
 libraries/ftc/build/
 libraries/ftc/local.properties
 
-# FRC vendor Maven repo is generated into public/ on Pages deploy
+# FRC/FTC vendor Maven repos are generated into public/ on Pages deploy
 public/frc-maven/
+public/maven/
 

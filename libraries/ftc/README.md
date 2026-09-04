@@ -11,7 +11,9 @@ Teams consume a compiled artifact only. Do not `includeBuild` this module in a r
 ```gradle
 // TeamCode/build.gradle
 repositories {
-    mavenLocal()
+    maven {
+        url = 'https://brainstem-first.github.io/Brainstem-Pilot-UI/maven'
+    }
 }
 
 dependencies {
@@ -47,10 +49,10 @@ Optional: `onOpModeStart()`, `drawRobot(Canvas)`.
 
 Follower gains are dashboard-tunable on `BezierFollowerConfig`. Do not copy follower or JSON-parser classes into TeamCode.
 
-## Local publish
+## Local publish (library authors only)
 
 ```bash
 ./gradlew publishToMavenLocal
 ```
 
-Then resolve `org.brainstemfirst:pilot-ftc:2026.1.0` from `mavenLocal()` without `includeBuild`.
+That is optional. Teams resolve `org.brainstemfirst:pilot-ftc:2026.1.0` from GitHub Pages, not from `mavenLocal()`.
