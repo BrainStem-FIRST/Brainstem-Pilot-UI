@@ -1,0 +1,20 @@
+{
+  "fileName": "BrainstemPilot.json",
+  "name": "BrainstemPilot",
+  "version": "0.1.0-SNAPSHOT",
+  "uuid": "d29aaf16-66ae-412b-9b49-e8be049d8af0",
+  "frcYear": "2026",
+  "mavenUrls": [
+    "https://brainstem-first.github.io/Brainstem-Pilot-UI/frc-maven"
+  ],
+  "jsonUrl": "https://brainstem-first.github.io/Brainstem-Pilot-UI/vendordeps/BrainstemPilot.json",
+  "javaDependencies": [
+    {
+      "groupId": "org.brainstemfirst",
+      "artifactId": "pilot-frc",
+      "version": "0.1.0-SNAPSHOT"
+    }
+  ],
+  "jniDependencies": [],
+  "cppDependencies": []
+}

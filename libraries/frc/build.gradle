@@ -32,8 +32,10 @@ dependencies {
     compileOnly "edu.wpi.first.hal:hal-java:${wpilibVersion}"
     compileOnly "edu.wpi.first.wpinet:wpinet-java:${wpilibVersion}"
 
-    api 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 }
+
+def vendorRepo = layout.projectDirectory.dir('repo')
 
 publishing {
     publications {
@@ -45,6 +47,9 @@ publishing {
         }
     }
     repositories {
-        mavenLocal()
+        maven {
+            name = 'vendorRepo'
+            url = vendorRepo
+        }
     }
 }

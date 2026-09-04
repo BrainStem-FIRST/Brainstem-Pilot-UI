@@ -1,25 +1,43 @@
 # Brainstem Pilot FRC library
 
-Gradle coordinate: `org.brainstemfirst:pilot-frc:0.1.0-SNAPSHOT`
+Vendordep: `BrainstemPilot.json`  
+Maven coordinate: `org.brainstemfirst:pilot-frc:0.1.0-SNAPSHOT`
 
 This module is the robot-side Bézier follower and auto JSON reader. The visual editor stays in the app; this library runs on the RoboRIO.
 
 ## Add it to an FRC project
 
-Teams consume a compiled artifact only. Do not `includeBuild` this module in a robot project — that exposes library sources as an editable Gradle module.
+Do **not** add a Gradle `implementation` line. Install it the same way as PathPlanner, Phoenix, REV, and other FRC libraries: WPILib vendordeps.
 
-```gradle
-// build.gradle
-repositories {
-    mavenLocal()
-}
+### Online (VS Code / WPILib)
 
-dependencies {
-    implementation 'org.brainstemfirst:pilot-frc:0.1.0-SNAPSHOT'
-}
+1. Open the robot project in WPILib VS Code.
+2. Command Palette → **WPILib: Manage Vendor Libraries** → **Install new libraries (online)**.
+3. Paste:
+
+```
+https://brainstem-first.github.io/Brainstem-Pilot-UI/vendordeps/BrainstemPilot.json
 ```
 
-Also add `mavenLocal()` in `settings.gradle` `pluginManagement.repositories` if the robot project does not already resolve from it.
+That copies the vendordep into `vendordeps/` and GradleRIO pulls `pilot-frc` from the URL in `mavenUrls`. This URL is served by GitHub Pages after the file is on `master`; it will 404 until then.
+
+### Offline (from this repo)
+
+**WPILib: Manage Vendor Libraries** → **Install new libraries (offline)** and select `libraries/frc/BrainstemPilot.json`.
+
+Offline install still needs the Maven artifacts. From this directory:
+
+```bash
+./gradlew publish
+```
+
+That writes a Maven repo to `libraries/frc/repo`. Point `mavenUrls` in your project's `vendordeps/BrainstemPilot.json` at that folder if you are iterating on the library locally, for example:
+
+```json
+"mavenUrls": [
+  "file:../Brainstem-Pilot-UI/libraries/frc/repo"
+]
+```
 
 ## Team wiring
 
@@ -42,11 +60,3 @@ PilotRegistry.addCommand("Collection", "Intake Pivot Out", () -> SimpleCommands.
 ```
 
 Your drive needs those four methods (pose, field-relative chassis speeds, velocity out, max angular speed). Follower gains are global on `BezierFollowerConfig`. Per-path `maxVel` / `maxAccel` come from path JSON into `BezierParams`.
-
-## Local publish
-
-```bash
-./gradlew publishToMavenLocal
-```
-
-Then resolve `org.brainstemfirst:pilot-frc:0.1.0-SNAPSHOT` from `mavenLocal()`.
