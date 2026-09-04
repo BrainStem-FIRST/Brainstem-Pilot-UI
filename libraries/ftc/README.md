@@ -1,6 +1,6 @@
 # Brainstem Pilot FTC library
 
-Gradle coordinate: `org.brainstemfirst:pilot-ftc:0.1.0-SNAPSHOT`
+Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.0`
 
 This module is the robot-side Bézier follower and auto JSON reader. The visual editor stays in the app; this library runs on the Control Hub.
 
@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.brainstemfirst:pilot-ftc:0.1.0-SNAPSHOT'
+    implementation 'org.brainstemfirst:pilot-ftc:2026.1.0'
 }
 ```
 
@@ -53,4 +53,4 @@ Follower gains are dashboard-tunable on `BezierFollowerConfig`. Do not copy foll
 ./gradlew publishToMavenLocal
 ```
 
-Then resolve `org.brainstemfirst:pilot-ftc:0.1.0-SNAPSHOT` from `mavenLocal()` without `includeBuild`.
+Then resolve `org.brainstemfirst:pilot-ftc:2026.1.0` from `mavenLocal()` without `includeBuild`.
