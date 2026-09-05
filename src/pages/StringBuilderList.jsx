@@ -116,7 +116,9 @@ export default function StringBuilderList() {
       readEntity('SavedAuto'),
       readEntity('Point'),
     ]).then(([data, paths, points]) => {
-      const sorted = Array.isArray(data) ? data.sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)) : [];
+      const sorted = Array.isArray(data)
+        ? [...data].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+        : [];
       setAutos(sorted);
       setAllPaths(Array.isArray(paths) ? paths.map(normalizeSavedPath) : []);
       setAllPoints(Array.isArray(points) ? points : []);

@@ -51,7 +51,6 @@ function makeRecord(data) {
   return {
     id: data.id || `gen-${Date.now()}`,
     created_date: new Date().toISOString(),
-    updated_date: new Date().toISOString(),
     ...data,
   };
 }
@@ -177,7 +176,6 @@ function ensureIds(records) {
     return {
       id,
       created_date: r.created_date || new Date().toISOString(),
-      updated_date: r.updated_date || new Date().toISOString(),
       ...r,
     };
   });
@@ -213,7 +211,7 @@ async function writeSavedAuto(id, updates) {
   const oldId = record.id;
   const newName = updates.name ?? record.name;
   const newId = updates.name ? safeNameFromString(newName) : oldId;
-  const updated = { ...record, ...updates, id: newId, updated_date: new Date().toISOString() };
+  const updated = { ...record, ...updates, id: newId };
   const previousName = updates.name && updates.name !== record.name ? record.name : null;
   await savePathToProject(updated, previousName);
 }
@@ -273,7 +271,6 @@ export async function createEntity(entityType, data) {
       const { name, id } = allocateUniqueName(data.name, await readSavedAutos());
       const record = {
         created_date: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
         ...data,
         name,
         id,
@@ -285,7 +282,6 @@ export async function createEntity(entityType, data) {
       const { name, id } = allocateUniqueName(data.name, await readPoints());
       const record = {
         created_date: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
         ...data,
         name,
         id,
@@ -297,7 +293,6 @@ export async function createEntity(entityType, data) {
       const { name, id } = allocateUniqueName(data.name, await readAutos());
       const record = {
         created_date: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
         ...data,
         name,
         id,
@@ -312,7 +307,6 @@ export async function createEntity(entityType, data) {
     return {
       id: `gen-${Date.now()}`,
       created_date: new Date().toISOString(),
-      updated_date: new Date().toISOString(),
       ...data,
     };
   }
@@ -339,7 +333,7 @@ export async function updateEntity(entityType, id, updates) {
     const oldId = record.id;
     const newName = updates.name ?? record.name;
     const newId = updates.name ? safeNameFromString(newName) : oldId;
-    const updated = { ...record, ...updates, id: newId, updated_date: new Date().toISOString() };
+    const updated = { ...record, ...updates, id: newId };
     const previousName = updates.name && updates.name !== record.name ? record.name : null;
     await savePointToProject(updated, previousName);
     return;
@@ -352,7 +346,7 @@ export async function updateEntity(entityType, id, updates) {
     const oldId = record.id;
     const newName = updates.name ?? record.name;
     const newId = updates.name ? safeNameFromString(newName) : oldId;
-    const updated = { ...record, ...updates, id: newId, updated_date: new Date().toISOString() };
+    const updated = { ...record, ...updates, id: newId };
     const previousName = updates.name && updates.name !== record.name ? record.name : null;
     await saveAutoToProject(updated, previousName);
     return;
@@ -368,7 +362,7 @@ export async function updateEntity(entityType, id, updates) {
     const withIds = ensureIds(records);
     const idx = withIds.findIndex(r => r.id === id);
     if (idx >= 0) {
-      withIds[idx] = { ...withIds[idx], ...updates, updated_date: new Date().toISOString() };
+      withIds[idx] = { ...withIds[idx], ...updates };
       await writeToFolder(entityType, stripIds(withIds));
     }
   }
