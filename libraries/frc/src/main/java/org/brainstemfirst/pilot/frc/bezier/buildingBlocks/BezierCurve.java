@@ -45,10 +45,6 @@ public class BezierCurve {
         this.control2 = start.plus(startToEnd.times(0.667));
     }
 
-    // -------------------------------------------------------------------------
-    // Core math
-    // -------------------------------------------------------------------------
-
     /**
      * Evaluates the curve position at parameter {@code t}.
      *
@@ -89,18 +85,10 @@ public class BezierCurve {
                 .plus(end.minus(control2).times(3.0 * t2));
     }
 
-    // -------------------------------------------------------------------------
-    // Accessors
-    // -------------------------------------------------------------------------
-
     public Translation2d getStart()    { return start; }
     public Translation2d getControl1() { return control1; }
     public Translation2d getControl2() { return control2; }
     public Translation2d getEnd()      { return end; }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     private static double clamp01(double v) {
         return Math.max(0.0, Math.min(1.0, v));

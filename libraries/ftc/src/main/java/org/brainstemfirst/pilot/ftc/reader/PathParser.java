@@ -4,12 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.brainstemfirst.pilot.ftc.PilotRegistry;
-import org.brainstemfirst.pilot.ftc.model.PilotGeometry;
 import org.brainstemfirst.pilot.ftc.model.PilotPoint;
-import org.brainstemfirst.pilot.ftc.model.PilotSchema;
-import org.brainstemfirst.pilot.ftc.model.PilotTrigger;
+import org.brainstemfirst.pilot.ftc.model.PilotSlot;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.BezierCurve;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.BezierParams;
+import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.PathFollowerUtils;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.RotationPoint;
 import org.brainstemfirst.pilot.ftc.bezier.follower.BezierPath;
 import org.brainstemfirst.pilot.ftc.bezier.tolerance.CircleTolerance;
@@ -82,7 +81,7 @@ public class PathParser {
      */
     public static BezierPath[] parsePathFile(String pathId, BezierParams defaultParams, Pose2d startOverride)
             throws IOException {
-        return parsePathJson(pathId, PilotAssetLoader.readPathText(pathId), defaultParams, startOverride);
+        return parsePathJson(pathId, BrainstemPilot.readPathText(pathId), defaultParams, startOverride);
     }
 
     /** Path parsing proper, decoupled from asset loading. */
@@ -90,7 +89,7 @@ public class PathParser {
             throws IOException {
         JsonNode root = m_objectMapper.readTree(json);
 
-        PilotSchema.validate(
+        checkSchemaVersion(
                 "Path '" + pathId + "'",
                 root.path("schemaVersion").asInt(0),
                 root.path("units").asText(null),
@@ -136,7 +135,7 @@ public class PathParser {
             }
         }
 
-        List<PilotTrigger> triggers = readTriggers(root.get("subsystemTriggers"));
+        List<PilotSlot.SlotTrigger> triggers = readTriggers(root.get("subsystemTriggers"));
 
         return buildSegments(waypoints, maxLinearVelocity, maxAcceleration, rotationTargets, triggers, defaultParams);
     }
@@ -149,12 +148,12 @@ public class PathParser {
     public static BezierPath[] buildPointSegment(Pose2d startPose,
                                                  PilotPoint point,
                                                  JsonNode slotParams,
-                                                 List<PilotTrigger> slotTriggers,
+                                                 List<PilotSlot.SlotTrigger> slotTriggers,
                                                  BezierParams defaultParams) throws IOException {
         Waypoint start = new Waypoint();
         start.x = startPose.position.x;
         start.y = startPose.position.y;
-        start.rotationDeg = PilotGeometry.toDegrees(startPose.heading.toDouble());
+        start.rotationDeg = Math.toDegrees(startPose.heading.toDouble());
 
         Waypoint end = new Waypoint();
         end.x = point.x;
@@ -166,7 +165,7 @@ public class PathParser {
         waypoints.add(start);
         waypoints.add(end);
 
-        List<PilotTrigger> triggers = slotTriggers == null ? Collections.emptyList() : slotTriggers;
+        List<PilotSlot.SlotTrigger> triggers = slotTriggers == null ? Collections.emptyList() : slotTriggers;
 
         return buildSegments(waypoints, defaultParams.maxLinearSpeed, defaultParams.profileDecel,
                 Collections.emptyList(), triggers, defaultParams);
@@ -196,7 +195,7 @@ public class PathParser {
 
         first.x = pose.position.x;
         first.y = pose.position.y;
-        first.rotationDeg = PilotGeometry.toDegrees(pose.heading.toDouble());
+        first.rotationDeg = Math.toDegrees(pose.heading.toDouble());
         if (first.nextControl != null) {
             first.nextControl = new Vector2d(first.nextControl.x + dx, first.nextControl.y + dy);
         }
@@ -206,7 +205,7 @@ public class PathParser {
                                               double maxLinearVelocity,
                                               double maxAcceleration,
                                               List<RotationTarget> rotationTargets,
-                                              List<PilotTrigger> triggers,
+                                              List<PilotSlot.SlotTrigger> triggers,
                                               BezierParams defaultParams) {
         int segmentCount = waypoints.size() - 1;
         List<BezierCurve> curves = new ArrayList<>();
@@ -236,7 +235,7 @@ public class PathParser {
             Vector2d lastPoint = curve.getPoint(0.0);
             for (int j = 1; j <= ARC_LENGTH_SAMPLES; j++) {
                 Vector2d currentPoint = curve.getPoint((double) j / ARC_LENGTH_SAMPLES);
-                segLength += PilotGeometry.vecDist(currentPoint, lastPoint);
+                segLength += PathFollowerUtils.vecDist(currentPoint, lastPoint);
                 lastPoint = currentPoint;
             }
             segmentLengths[i] = segLength;
@@ -245,16 +244,16 @@ public class PathParser {
 
         List<GlobalRotation> globalRotations = new ArrayList<>();
 
-        globalRotations.add(new GlobalRotation(0.0, PilotGeometry.fromDegrees(waypoints.get(0).rotationDeg)));
+        globalRotations.add(new GlobalRotation(0.0, Math.toRadians(waypoints.get(0).rotationDeg)));
 
         for (RotationTarget rotTarget : rotationTargets) {
             globalRotations.add(new GlobalRotation(
                     rotTarget.resolveDistance(totalPathLength),
-                    PilotGeometry.fromDegrees(rotTarget.rotationDeg)));
+                    Math.toRadians(rotTarget.rotationDeg)));
         }
 
         double finalHeading = waypoints.get(waypoints.size() - 1).rotationDeg;
-        globalRotations.add(new GlobalRotation(totalPathLength, PilotGeometry.fromDegrees(finalHeading)));
+        globalRotations.add(new GlobalRotation(totalPathLength, Math.toRadians(finalHeading)));
 
         globalRotations.sort((r1, r2) -> Double.compare(r1.distance, r2.distance));
 
@@ -284,7 +283,6 @@ public class PathParser {
 
         BezierParams[] segmentParams = new BezierParams[segmentCount];
         for (int i = 0; i < segmentCount; i++) {
-            // A segment is governed by the params of the waypoint it arrives at.
             segmentParams[i] = buildSegmentParams(
                     waypoints.get(i + 1).params, maxLinearVelocity, maxAcceleration, defaultParams);
         }
@@ -295,7 +293,7 @@ public class PathParser {
         double runningDist = 0.0;
         for (int i = 0; i < segmentCount; i++) {
             double segEnd = runningDist + segmentLengths[i];
-            for (PilotTrigger trig : triggers) {
+            for (PilotSlot.SlotTrigger trig : triggers) {
                 if (!trig.isComplete()) {
                     continue;
                 }
@@ -358,7 +356,9 @@ public class PathParser {
         // An absolute speed in the file's units (in/s), clamped by the path's own limit —
         // not a fraction. The editor treats it as min(maxVel, value).
         if (params.has("maxLinearSpeed")) {
-            bp.setMaxLinearSpeed(Math.min(maxLinearVelocity, params.get("maxLinearSpeed").asDouble()));
+            double maxSpeed = Math.min(maxLinearVelocity, params.get("maxLinearSpeed").asDouble());
+            bp.setMaxLinearSpeed(maxSpeed);
+            bp.setProfileCruiseVel(maxSpeed);
         }
         if (params.has("maxTurnPower")) bp.setMaxTurnPower(params.get("maxTurnPower").asDouble());
         if (params.has("maxTime")) bp.setMaxTime(params.get("maxTime").asDouble());
@@ -367,13 +367,29 @@ public class PathParser {
         return bp;
     }
 
-    private static List<PilotTrigger> readTriggers(JsonNode triggersNode) {
-        List<PilotTrigger> triggers = new ArrayList<>();
+    static void checkSchemaVersion(String description, int schemaVersion, String units, String headingUnit)
+            throws IOException {
+        if (schemaVersion > 2) {
+            throw new IOException(description + " uses schemaVersion " + schemaVersion
+                    + ", newer than this reader supports (2). Update the robot code.");
+        }
+        if (units != null && !units.isEmpty() && !"in".equalsIgnoreCase(units)) {
+            throw new IOException(description + " is authored in units '" + units
+                    + "'; this reader only handles 'in'.");
+        }
+        if (headingUnit != null && !headingUnit.isEmpty() && !"deg".equalsIgnoreCase(headingUnit)) {
+            throw new IOException(description + " is authored in heading unit '" + headingUnit
+                    + "'; this reader only handles 'deg'.");
+        }
+    }
+
+    private static List<PilotSlot.SlotTrigger> readTriggers(JsonNode triggersNode) {
+        List<PilotSlot.SlotTrigger> triggers = new ArrayList<>();
         if (triggersNode == null || !triggersNode.isArray()) {
             return triggers;
         }
         for (JsonNode trig : triggersNode) {
-            PilotTrigger trigger = new PilotTrigger();
+            PilotSlot.SlotTrigger trigger = new PilotSlot.SlotTrigger();
             trigger.id = trig.path("id").asText(null);
             trigger.subsystemName = trig.path("subsystemName").asText("");
             trigger.commandName = trig.path("commandName").asText("");
@@ -396,7 +412,7 @@ public class PathParser {
             GlobalRotation r2 = timeline.get(i + 1);
             if (distance >= r1.distance && distance <= r2.distance) {
                 double t = (distance - r1.distance) / (r2.distance - r1.distance);
-                return PilotGeometry.lerpHeading(r1.headingRad, r2.headingRad, t);
+                return PathFollowerUtils.lerpHeading(r1.headingRad, r2.headingRad, t);
             }
         }
         return timeline.get(timeline.size() - 1).headingRad;

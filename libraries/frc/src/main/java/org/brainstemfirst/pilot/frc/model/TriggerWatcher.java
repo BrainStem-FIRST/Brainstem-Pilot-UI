@@ -1,24 +1,27 @@
 package org.brainstemfirst.pilot.frc.model;
 
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj2.command.Command;
 import org.brainstemfirst.pilot.frc.bezier.follower.BezierPath;
 import org.brainstemfirst.pilot.frc.bezier.follower.BezierPath.SubsystemTriggerPoint;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.BezierCurve;
 
+import java.util.function.Supplier;
+
 public class TriggerWatcher extends Command {
 
     private static final int ARC_LENGTH_SAMPLES = 40;
 
-    private final PilotDrive m_drive;
+    private final Supplier<Pose2d> m_pose;
     private final BezierPath[] m_paths;
 
     // Precomputed: cumulative arc length at the START of each segment
     private final double[] m_segmentStartDistances;
     private final double m_totalLength;
 
-    public TriggerWatcher(PilotDrive drive, BezierPath[] paths) {
-        m_drive = drive;
+    public TriggerWatcher(Supplier<Pose2d> pose, BezierPath[] paths) {
+        m_pose = pose;
         m_paths = paths;
 
         // Precompute segment start distances
@@ -45,7 +48,7 @@ public class TriggerWatcher extends Command {
 
     @Override
     public void execute() {
-        Translation2d robotPos = m_drive.getPose().getTranslation();
+        Translation2d robotPos = m_pose.get().getTranslation();
         double traveledDistance = estimateTraveledDistance(robotPos);
 
         for (int i = 0; i < m_paths.length; i++) {

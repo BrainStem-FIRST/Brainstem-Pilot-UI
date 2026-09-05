@@ -63,8 +63,8 @@ const OPTIONAL_PARAMS = [
     label: 'Min Linear Speed',
     unit: 'm/s',
     default: 0,
-    summary: 'Floor on forward speed so the robot does not stop while passing through this waypoint.',
-    detail: 'Use this on points the robot should drive through rather than settle at. A non-zero minimum keeps the robot moving at least that fast through the waypoint instead of braking to a halt between segments. Value is in meters per second.',
+    summary: 'Handover speed at this waypoint: the previous path ends here and the next path starts here.',
+    detail: 'A non-zero value is the end speed of the incoming path (or segment) and the entry speed of the next one, so the robot does not stop at the joint. Set it on the last waypoint of the previous path or the first waypoint of the next path. Value is in meters per second.',
   },
   {
     key: 'maxLinearSpeed',

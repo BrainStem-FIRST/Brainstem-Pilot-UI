@@ -40,14 +40,14 @@ public class MyAuto extends PilotAutoBase {
 
 Fill in `PilotAutoBase` (it extends library `PilotOpMode`). The stub already assigns `BezierFollowerConfig` gains in `configureFollower()` — edit those values there. Road Runner `kV`/`kS`/`kA` stay on `MecanumDrive.PARAMS`.
 
-- `setupRobot(PilotAlliance, Pose2d)` — construct your robot, seed odometry
-- `getDrive()` — return a `PilotDrive` (your Road Runner `MecanumDrive` can implement it)
+- `setupRobot(FieldConstants.Alliance, Pose2d)` — construct your robot, seed odometry
+- `pose()` / `lastVelRobot()` / `setDrivePowers()` / `maxAngVel()` — return method refs on your drivetrain (the drive class does not implement a library interface)
 - `registerCommands()` — `PilotRegistry.addCommand("Subsystem", "Command", () -> action)` for every name used in the UI
 - `updateRobot(TelemetryPacket)` — subsystem loop + `updatePoseEstimate()` (return `true` to keep running)
 
-Optional: `onOpModeStart()`, `drawRobot(Canvas)`.
+Optional: `onOpModeStart()`.
 
-Follower gains are dashboard-tunable on `BezierFollowerConfig`. Do not copy follower or JSON-parser classes into TeamCode.
+Follower gains are set in `PilotAutoBase.configureFollower()` on `BezierFollowerConfig` (read every loop). Per-path `maxVel` / `maxAccel` come from JSON into `BezierParams` at parse time. Do not copy follower or JSON-parser classes into TeamCode.
 
 ## Local publish (library authors only)
 

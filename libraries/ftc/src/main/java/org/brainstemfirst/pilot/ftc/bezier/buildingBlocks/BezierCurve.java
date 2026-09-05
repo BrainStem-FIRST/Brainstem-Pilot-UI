@@ -1,6 +1,5 @@
 package org.brainstemfirst.pilot.ftc.bezier.buildingBlocks;
 
-import com.acmerobotics.dashboard.canvas.Canvas;
 import com.acmerobotics.roadrunner.Vector2d;
 
 /**
@@ -72,18 +71,5 @@ public class BezierCurve {
 
     private static double clamp01(double v) {
         return Math.max(0.0, Math.min(1.0, v));
-    }
-
-    public void draw(Canvas canvas, int numPoints) {
-        double[] xPoints = new double[numPoints];
-        double[] yPoints = new double[numPoints];
-        for (int i = 0; i < numPoints; i++) {
-            double t = i * 1.0 / (numPoints - 1);
-            Vector2d point = getPoint(t);
-            xPoints[i] = point.x;
-            yPoints[i] = point.y;
-        }
-        canvas.setStrokeWidth(1);
-        canvas.strokePolyline(xPoints, yPoints);
     }
 }

@@ -37,9 +37,13 @@ export function chainPathToPose(waypoints, startPose) {
  * @param {Object} constraints Performance limitations { maxVel, maxAccel }.
  * @param {Array} rotationTargets Keyframe milestones for changing heading orientations.
  * @param {boolean} isRedAlliance If true, mirrors the entire calculation to the red side.
+ * @param {number} [startVel=0] Speed at the first waypoint (for chained auto slots).
+ * @param {number|null} [endVel=null] Speed at the last waypoint. When null, uses that
+ *   waypoint's minLinearSpeed / passPosition. Chained autos pass the next path's entry
+ *   min speed so this path finishes at the handover speed.
  * @return {Object} Evaluated trajectory stats and sample state arrays.
  */
-export function generateTrajectory(waypoints, constraints, rotationTargets = [], isRedAlliance = false) {
+export function generateTrajectory(waypoints, constraints, rotationTargets = [], isRedAlliance = false, startVel = 0, endVel = null) {
   if (!waypoints || waypoints.length < 2) return null;
   const hasUserRotationTargets = rotationTargets.length > 0;
 
@@ -173,7 +177,7 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
   const maxAccel = constraints.maxAccel ?? 2.5;
   const { maxOmegaDeg, maxAlphaDeg } = headingRateLimits(constraints);
   const waypointArcLengths = computeWaypointArcLengths(segments, samplesPerSegment);
-  const waypointVelocities = planWaypointVelocities(processedWaypoints, waypointArcLengths, maxVel, maxAccel);
+  const waypointVelocities = planWaypointVelocities(processedWaypoints, waypointArcLengths, maxVel, maxAccel, startVel, endVel);
   const startRotation = processedWaypoints[0].rotation;
   const nSeg = segments.length;
   const hasPathLength = totalLength > 1e-9;
@@ -211,7 +215,13 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
       ? headingTravelAlong(startRotation, processedRotations, startProgress, endProgress)
       : Math.abs(shortestAngleDelta(startH, endH));
     const headingMotion = planHeadingTiming(headingTravel, maxOmegaDeg, maxAlphaDeg);
-    const legDuration = Math.max(linearMotion.totalTime, headingMotion.totalTime);
+    // Heading is sampled from path progress, so stretching the drive to "make time for
+    // the turn" would scale down the planned waypoint speeds. Keep minLinearSpeed visible
+    // whenever this leg enters or leaves a waypoint above a stop.
+    const preserveWaypointSpeed = v0 > 1e-6 || v1 > 1e-6;
+    const legDuration = preserveWaypointSpeed
+      ? linearMotion.totalTime
+      : Math.max(linearMotion.totalTime, headingMotion.totalTime);
 
     if (legDuration <= 0) {
       if (states.length === 0) {
@@ -220,7 +230,7 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
           time: globalTime,
           x: spatialPose.x,
           y: spatialPose.y,
-          velocity: 0,
+          velocity: v0,
           heading: startH,
           pathHeading: spatialPose.pathHeading,
         });
@@ -312,18 +322,100 @@ function getWaypointMinSpeed(waypoints, index) {
 function getEndWaypointSpeed(waypoints, maxVel) {
   const n = waypoints.length;
   const params = waypoints[n - 1]?.params ?? {};
-  if (params.passPosition) {
-    return getWaypointMinSpeed(waypoints, n - 1) ?? maxVel;
-  }
+  const minV = getWaypointMinSpeed(waypoints, n - 1);
+  if (minV != null) return minV;
+  if (params.passPosition) return maxVel;
   return 0;
 }
 
-/** Forward/backward pass — minLinearSpeed on interior waypoints does not require passPosition. */
-function planWaypointVelocities(waypoints, arcLengths, maxVel, maxAccel) {
+function isDriveSlot(slot) {
+  return (slot?.type === 'path' || slot?.type === 'point') && (slot.chainedWaypoints?.length ?? 0) >= 2;
+}
+
+/** Only waits (and parallels that include a wait) break the speed chain. Instant subsystem commands do not. */
+function slotBreaksVelocityChain(slot) {
+  if (slot?.type === 'wait') return true;
+  if (slot?.type === 'parallel') {
+    return (slot.parallelSubs ?? []).some(s => s.type === 'wait');
+  }
+  return false;
+}
+
+function nextDriveSlot(resolved, fromIndex) {
+  for (let j = fromIndex + 1; j < resolved.length; j++) {
+    const slot = resolved[j];
+    if (slot.skip) continue;
+    if (slotBreaksVelocityChain(slot)) return null;
+    if (isDriveSlot(slot)) return slot;
+  }
+  return null;
+}
+
+function slotParamsMinSpeed(slot) {
+  const minV = slot?.params?.minLinearSpeed;
+  return minV != null && minV > 0 ? minV : null;
+}
+
+/**
+ * Speed the next drive slot wants at the joint.
+ * Path slots store that on the first waypoint; Point slots store optional params on the
+ * destination (and on the slot itself), not on the virtual start pose.
+ */
+function nextSlotHandoverMin(nextSlot) {
+  if (!isDriveSlot(nextSlot)) return null;
+  const wps = nextSlot.chainedWaypoints;
+  const startMin = getWaypointMinSpeed(wps, 0);
+  if (nextSlot.type === 'point') {
+    const destMin = getWaypointMinSpeed(wps, wps.length - 1) ?? slotParamsMinSpeed(nextSlot);
+    return destMin ?? startMin;
+  }
+  return startMin;
+}
+
+/** End speed of this path, raised to the next slot's minLinearSpeed when they chain. */
+function chainHandoverSpeed(currentWaypoints, nextSlot, maxVel) {
+  const ownEnd = getEndWaypointSpeed(currentWaypoints, maxVel);
+  const nextMin = nextSlotHandoverMin(nextSlot);
+  if (nextMin != null) return Math.max(ownEnd, nextMin);
+  return ownEnd;
+}
+
+/**
+ * Attach per-slot trajectories with minLinearSpeed handed across path joints:
+ * the previous path ends at that speed and the next path starts at it.
+ */
+export function attachChainTrajectories(resolved, defaultConstraints) {
+  let startVel = 0;
+  return (resolved ?? []).map((slot, i) => {
+    if (slot.skip) return slot;
+    if (slotBreaksVelocityChain(slot)) {
+      startVel = 0;
+      return slot;
+    }
+    if (!isDriveSlot(slot)) return slot;
+    const constraints = slot.type === 'path' && slot.path?.constraints?.maxVel
+      ? slot.path.constraints
+      : defaultConstraints;
+    const rotationTargets = slot.type === 'path' ? (slot.path?.rotationTargets ?? []) : [];
+    const maxVel = constraints?.maxVel ?? 3.0;
+    const nextSlot = nextDriveSlot(resolved, i);
+    const endVel = chainHandoverSpeed(slot.chainedWaypoints, nextSlot, maxVel);
+    const trajectory = generateTrajectory(
+      slot.chainedWaypoints, constraints, rotationTargets, false, startVel, endVel,
+    );
+    startVel = nextSlot ? endVel : 0;
+    return { ...slot, trajectory };
+  });
+}
+
+/** Forward/backward pass — minLinearSpeed on a waypoint does not require passPosition. */
+function planWaypointVelocities(waypoints, arcLengths, maxVel, maxAccel, startVel = 0, endVel = null) {
   const n = waypoints.length;
   const velocities = new Array(n).fill(maxVel);
-  velocities[0] = 0;
-  velocities[n - 1] = getEndWaypointSpeed(waypoints, maxVel);
+  const entrySpeed = Math.max(0, startVel);
+  const exitSpeed = endVel != null ? Math.max(0, endVel) : getEndWaypointSpeed(waypoints, maxVel);
+  velocities[0] = entrySpeed;
+  velocities[n - 1] = exitSpeed;
 
   const enforceInteriorMinSpeeds = () => {
     for (let i = 1; i < n - 1; i++) {
@@ -350,8 +442,8 @@ function planWaypointVelocities(waypoints, arcLengths, maxVel, maxAccel) {
       velocities[i] = Math.min(velocities[i], maxApproach);
     }
 
-    velocities[0] = 0;
-    velocities[n - 1] = getEndWaypointSpeed(waypoints, maxVel);
+    velocities[0] = entrySpeed;
+    velocities[n - 1] = exitSpeed;
     enforceInteriorMinSpeeds();
   }
 

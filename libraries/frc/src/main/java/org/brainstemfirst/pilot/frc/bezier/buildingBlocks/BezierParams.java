@@ -25,7 +25,8 @@ public class BezierParams {
     public double maxLinearSpeed = 4.75;
     public double maxTurnPower = 1.0;
 
-    public double maxTime = 10.0;
+    /** Seconds to finish this segment. {@code NaN} means unset (no timeout). Set from the UI optional param. */
+    public double maxTime = Double.NaN;
 
     public BezierParams setTolerance(Tolerance tolerance) {
         this.tolerance = tolerance;
@@ -71,5 +72,9 @@ public class BezierParams {
     public BezierParams setMaxTime(double maxTime) {
         this.maxTime = maxTime;
         return this;
+    }
+
+    public boolean hasMaxTime() {
+        return Double.isFinite(maxTime) && maxTime > 0;
     }
 }

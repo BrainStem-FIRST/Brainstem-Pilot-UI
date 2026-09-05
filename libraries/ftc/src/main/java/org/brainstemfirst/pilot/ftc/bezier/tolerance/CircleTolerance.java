@@ -2,15 +2,10 @@ package org.brainstemfirst.pilot.ftc.bezier.tolerance;
 
 import com.acmerobotics.roadrunner.Vector2d;
 
-import org.brainstemfirst.pilot.ftc.model.PilotGeometry;
-
-import java.util.ArrayList;
-
 public class CircleTolerance implements Tolerance {
     public static class DefaultParams {
         public double distTol = 3.0;
         public double headingTolDeg = 4.0;
-        public int numToleranceCorners = 16;
     }
     public static DefaultParams defaultParams = new DefaultParams();
     private final double distTol;
@@ -18,7 +13,7 @@ public class CircleTolerance implements Tolerance {
 
     public CircleTolerance(double distTol, double headingTolDeg) {
         this.distTol = distTol;
-        this.headingTolRad = PilotGeometry.fromDegrees(headingTolDeg);
+        this.headingTolRad = Math.toRadians(headingTolDeg);
     }
 
     public CircleTolerance() {
@@ -43,17 +38,5 @@ public class CircleTolerance implements Tolerance {
     @Override
     public double getHeadingDampening(double headingErrorRad) {
         return Math.min(1, Math.abs(headingErrorRad) / headingTolRad);
-    }
-
-    @Override
-    public ArrayList<Vector2d> getToleranceCorners(Vector2d waypointPosition) {
-        double r = distTol * 0.5;
-        ArrayList<Vector2d> edges = new ArrayList<>();
-        double angleChange = 2 * Math.PI / defaultParams.numToleranceCorners;
-        for (int i = 0; i < defaultParams.numToleranceCorners; i++) {
-            double angle = i * angleChange;
-            edges.add(new Vector2d(Math.cos(angle) * r, Math.sin(angle) * r).plus(waypointPosition));
-        }
-        return edges;
     }
 }

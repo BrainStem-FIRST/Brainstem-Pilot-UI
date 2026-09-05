@@ -3,7 +3,7 @@ package org.brainstemfirst.pilot.ftc;
 import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.InstantAction;
 
-import org.brainstemfirst.pilot.ftc.model.PilotLog;
+import android.util.Log;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +26,7 @@ public final class PilotRegistry {
     public static Action getCommand(String subsystemName, String commandName) {
         Supplier<Action> supplier = registry.get(key(subsystemName, commandName));
         if (supplier == null) {
-            PilotLog.warn(TAG, "No registered command for: " + key(subsystemName, commandName));
+            Log.w(TAG, "No registered command for: " + key(subsystemName, commandName));
             return new InstantAction(() -> {});
         }
         return supplier.get();

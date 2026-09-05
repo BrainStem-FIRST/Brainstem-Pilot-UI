@@ -10,9 +10,6 @@ import java.util.List;
  * with a swerve drive robot.
  */
 public final class PathFollowerUtils {
-    // =========================================================================
-    // 1. Closest-T search  (coarse scan + ternary refinement)
-    // =========================================================================
 
     public static double findClosestT(BezierCurve curve, Translation2d robotPos, int coarseSamples, int maxIterations, double tolerance) {
         // --- Coarse scan ---
@@ -57,17 +54,11 @@ public final class PathFollowerUtils {
         return (lo + hi) / 2.0;
     }
 
-    // =========================================================================
-    // 2. Lookahead point
-    // =========================================================================
 
     public static Translation2d getLookaheadPoint(BezierCurve curve, double closestT, double lookaheadT) {
         return curve.getPoint(Math.min(1.0, closestT + lookaheadT));
     }
 
-    // =========================================================================
-    // 3. Remaining arc-length estimate
-    // =========================================================================
 
     public static double estimateRemainingLength(BezierCurve curve, double fromT, int samples) {
         double      length = 0.0;
@@ -82,10 +73,6 @@ public final class PathFollowerUtils {
 
         return length;
     }
-
-    // =========================================================================
-    // 4. Drive vector (with parallel / perpendicular decomposition)
-    // =========================================================================
 
     public static Translation2d calculateDriveVector(
             BezierCurve curve,
@@ -142,8 +129,15 @@ public final class PathFollowerUtils {
      * velocity error, and the resulting command saturates, which is the acceleration limit.
      */
     public static double profileTargetVelocity(double remainingLength, double cruiseVel, double decel) {
-        if (decel <= 0) return cruiseVel;
-        return Math.min(cruiseVel, Math.sqrt(Math.max(0.0, 2.0 * decel * remainingLength)));
+        return profileTargetVelocity(remainingLength, cruiseVel, decel, 0.0);
+    }
+
+    public static double profileTargetVelocity(double remainingLength, double cruiseVel, double decel, double minVel) {
+        double cruise = Math.max(0.0, cruiseVel);
+        double floor = Math.max(0.0, minVel);
+        if (decel <= 0) return Math.max(cruise, floor);
+        double braking = Math.sqrt(Math.max(0.0, 2.0 * decel * remainingLength));
+        return Math.max(floor, Math.min(cruise, braking));
     }
 
     /**
@@ -169,6 +163,24 @@ public final class PathFollowerUtils {
             double velKs,
             double velKp,
             double crossTrackKp) {
+        return calculateProfiledDriveVector(
+                curve, robotPos, closestT, signedRemainingLength, fieldVelocity,
+                cruiseVel, decel, velKv, velKs, velKp, crossTrackKp, 0.0);
+    }
+
+    public static Translation2d calculateProfiledDriveVector(
+            BezierCurve curve,
+            Translation2d robotPos,
+            double closestT,
+            double signedRemainingLength,
+            Translation2d fieldVelocity,
+            double cruiseVel,
+            double decel,
+            double velKv,
+            double velKs,
+            double velKp,
+            double crossTrackKp,
+            double minVel) {
 
         Translation2d tangent = curve.getDerivative(closestT);
         double tangentNorm = tangent.getNorm();
@@ -178,49 +190,27 @@ public final class PathFollowerUtils {
         Translation2d tangentUnit = tangent.times(1.0 / tangentNorm);
         Translation2d perpUnit = new Translation2d(-tangentUnit.getY(), tangentUnit.getX());
 
-        // Signed, so that a robot which has driven past the endpoint gets a negative target and
-        // reverses back to it. With an unsigned distance the command points down-tangent no matter
-        // which side of the target the robot is on, which is positive feedback: the further past it
-        // goes, the harder it drives away.
         double targetVel = Math.signum(signedRemainingLength)
-                * profileTargetVelocity(Math.abs(signedRemainingLength), cruiseVel, decel);
+                * profileTargetVelocity(Math.abs(signedRemainingLength), cruiseVel, decel, minVel);
         double actualVel = dot(fieldVelocity, tangentUnit);
 
         double tangentialCmd = velKv * targetVel + velKp * (targetVel - actualVel);
-        // Static feedforward follows the sign of the command. Adding it unconditionally would
-        // push the robot forward during the braking phase, when the command is negative.
         if (Math.abs(tangentialCmd) > 1e-3) {
             tangentialCmd += Math.signum(tangentialCmd) * velKs;
         }
 
-        // Signed perpendicular offset of the robot from the path, pushed back toward the curve.
         double crossTrackError = dot(robotPos.minus(curve.getPoint(closestT)), perpUnit);
         double perpCmd = -crossTrackKp * crossTrackError;
 
         return tangentUnit.times(tangentialCmd).plus(perpUnit.times(perpCmd));
     }
 
-    /** Commanded open-loop speed before the D term — useful for tuning telemetry. */
-    public static double commandedSpeed(double remainingLength, double speedKP, double speedKF) {
-        return remainingLength * speedKP + speedKF;
-    }
-
-    /** Signed projection of {@code vec} onto the path tangent at {@code t}. */
     public static double projectOnTangent(BezierCurve curve, double t, Translation2d vec) {
         Translation2d tangent = curve.getDerivative(t);
         double norm = tangent.getNorm();
         if (norm < 1e-6) return 0.0;
         return dot(vec, tangent.times(1.0 / norm));
     }
-
-    /** Signed velocity along the path tangent at {@code t}. Positive means moving toward the end. */
-    public static double tangentialVelocity(BezierCurve curve, double t, Translation2d fieldVelocity) {
-        return projectOnTangent(curve, t, fieldVelocity);
-    }
-
-    // =========================================================================
-    // 5. Heading interpolation
-    // =========================================================================
 
     /**
      * Calculates the dynamically interpolated target rotation using continuous Lerp blending.
@@ -236,31 +226,22 @@ public final class PathFollowerUtils {
             return entryHeading;
         }
 
-        // 👉 FIX FOR PATH 2: If there is only ONE rotation target point, 
-        // we lerp from the path's entry heading (115°) down to that target (0°) over the progress window.
         if (rotationPoints.size() == 1) {
             RotationPoint targetPoint = rotationPoints.get(0);
             
-            // If we are past the target's t progress, lock exactly onto the target
             if (t >= targetPoint.getT()) {
                 return targetPoint.getRotation();
             }
             
-            // Guard against divide-by-zero if target is exactly at t=0
             if (targetPoint.getT() < 1e-6) {
                 return targetPoint.getRotation();
             }
 
-            // Calculate progress percentage from the start line (t=0) to the target milestone
             double localPct = t / targetPoint.getT();
             
-            // Smoothly lerp from 115 degrees down to 0 degrees
             return entryHeading.interpolate(targetPoint.getRotation(), localPct);
         }
 
-        // --- Standard Multi-Point Interpolation Logic (Path 1) ---
-        
-        // Fallback if the progress is behind our initial marker point
         if (t <= rotationPoints.get(0).getT()) {
             RotationPoint first = rotationPoints.get(0);
             if (first.getT() < 1e-6) {
@@ -269,12 +250,11 @@ public final class PathFollowerUtils {
             return entryHeading.interpolate(first.getRotation(), t / first.getT());
         }
 
-        // Fallback if progress has completed past our final marker point
         if (t >= rotationPoints.get(rotationPoints.size() - 1).getT()) {
             return rotationPoints.get(rotationPoints.size() - 1).getRotation();
         }
 
-        // Find the two bounding rotation markers that our current progress 't' falls between
+        
         for (int i = 0; i < rotationPoints.size() - 1; i++) {
             RotationPoint p1 = rotationPoints.get(i);
             RotationPoint p2 = rotationPoints.get(i + 1);
@@ -294,118 +274,12 @@ public final class PathFollowerUtils {
         return rotationPoints.get(rotationPoints.size() - 1).getRotation();
     }
 
-    // =========================================================================
-    // 6. Rotation power
-    // =========================================================================
-
     public static double getRotationPower(Rotation2d currentHeading, Rotation2d targetHeading, double kP, double kF) {
         double errorRadians = targetHeading.minus(currentHeading).getRadians();
         double power = errorRadians * kP;
         if (Math.abs(power) > 1e-6) 
             return power + (Math.signum(power) * kF);
         return power;
-    }
-
-    // =========================================================================
-    // 7. Completion check
-    // =========================================================================
-
-    public static boolean isPathFinished(double closestT, Translation2d robotPos, BezierCurve curve, double distanceThreshold) {
-        return closestT >= 0.99 && robotPos.getDistance(curve.getEnd()) < distanceThreshold;
-    }
-
-    // =========================================================================
-    // 8. Centripetal force compensation
-    // =========================================================================
- 
-    public static Translation2d getCentripetalCompensation(BezierCurve curve, double t, double robotSpeedMps, double centripetalGain, double epsilon) {
-        double tA = Math.max(0.0, t - epsilon);
-        double tC = Math.min(1.0, t + epsilon);
- 
-        Translation2d A = curve.getPoint(tA);
-        Translation2d B = curve.getPoint(t);
-        Translation2d C = curve.getPoint(tC);
- 
-        double ab = A.getDistance(B);
-        double bc = B.getDistance(C);
-        double ca = C.getDistance(A);
- 
-        double cross = (B.getX() - A.getX()) * (C.getY() - A.getY())
-                     - (B.getY() - A.getY()) * (C.getX() - A.getX());
-        double twoArea = Math.abs(cross);
- 
-        if (twoArea < 1e-3) return new Translation2d();
- 
-        double radius = (ab * bc * ca) / (2.0 * twoArea);
-        double centripetalAccel = (robotSpeedMps * robotSpeedMps) / radius;
- 
-        double ax = A.getX(), ay = A.getY();
-        double bx = B.getX(), by = B.getY();
-        double cx = C.getX(), cy = C.getY();
- 
-        double D = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-        double ux = ((ax * ax + ay * ay) * (by - cy)
-                   + (bx * bx + by * by) * (cy - ay)
-                   + (cx * cx + cy * cy) * (ay - by)) / D;
-        double uy = ((ax * ax + ay * ay) * (cx - bx)
-                   + (bx * bx + by * by) * (ax - cx)
-                   + (cx * cx + cy * cy) * (bx - ax)) / D;
- 
-        Translation2d toCenter = new Translation2d(ux - bx, uy - by);
-        double toCenterNorm = toCenter.getNorm();
- 
-        if (toCenterNorm < 1e-9) return new Translation2d();
- 
-        Translation2d inwardUnit = toCenter.times(1.0 / toCenterNorm);
-        return inwardUnit.times(centripetalAccel * centripetalGain);
-    }
-
-    public record CentripetalInfo(Translation2d circleCenter, double circleRadius, Translation2d compensation) {}
-
-    public static CentripetalInfo getCentripetalCompensationDebug(BezierCurve curve, double t, double robotSpeedMps, double centripetalGain, double epsilon, double dtSeconds) {
-        double tA = Math.max(0.0, t - epsilon);
-        double tC = Math.min(1.0, t + epsilon);
- 
-        Translation2d A = curve.getPoint(tA);
-        Translation2d B = curve.getPoint(t);
-        Translation2d C = curve.getPoint(tC);
- 
-        double ab = A.getDistance(B);
-        double bc = B.getDistance(C);
-        double ca = C.getDistance(A);
- 
-        double cross = (B.getX() - A.getX()) * (C.getY() - A.getY())
-                     - (B.getY() - A.getY()) * (C.getX() - A.getX());
-        double twoArea = Math.abs(cross);
- 
-        if (twoArea < 1e-3) 
-            return new CentripetalInfo(null, 0, new Translation2d());
- 
-        double radius = (ab * bc * ca) / (2.0 * twoArea);
-        double centripetalAccel = (robotSpeedMps * robotSpeedMps) / radius;
-        double deltaVelocity = centripetalAccel * dtSeconds;
- 
-        double ax = A.getX(), ay = A.getY();
-        double bx = B.getX(), by = B.getY();
-        double cx = C.getX(), cy = C.getY();
- 
-        double D = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-        double ux = ((ax * ax + ay * ay) * (by - cy)
-                   + (bx * bx + by * by) * (cy - ay)
-                   + (cx * cx + cy * cy) * (ay - by)) / D;
-        double uy = ((ax * ax + ay * ay) * (cx - bx)
-                   + (bx * bx + by * by) * (ax - cx)
-                   + (cx * cx + cy * cy) * (bx - ax)) / D;
- 
-        Translation2d toCenter = new Translation2d(ux - bx, uy - by);
-        double toCenterNorm = toCenter.getNorm();
- 
-        if (toCenterNorm < 1e-9) 
-            return new CentripetalInfo(null, 0, new Translation2d());
- 
-        Translation2d inwardUnit = toCenter.times(1.0 / toCenterNorm);
-        Translation2d compensation = inwardUnit.times(deltaVelocity * centripetalGain);
-        return new CentripetalInfo(B.plus(toCenter), radius, compensation);
     }
 
     private static double dot(Translation2d a, Translation2d b) {

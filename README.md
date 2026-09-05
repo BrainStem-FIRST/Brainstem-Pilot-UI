@@ -89,7 +89,7 @@ The desktop builds are **not code-signed**, so the OS warns on first launch:
 
 Robot code that follows those JSON files lives in [`libraries/ftc`](libraries/ftc) (`org.brainstemfirst:pilot-ftc`). Teams add the published artifact with Gradle; do not `includeBuild` the library into a robot project.
 
-Opening an FTC project (or saving an Auto) creates `PilotAutoBase.java` in the project folder if it is missing. Generated OpModes extend that class. Edit it to construct your robot, implement `PilotDrive`, and call `PilotRegistry.addCommand(...)` — the UI will not overwrite it. See [`libraries/ftc/README.md`](libraries/ftc/README.md).
+Opening an FTC project (or saving an Auto) creates `PilotAutoBase.java` in the project folder if it is missing. Generated OpModes extend that class. Edit it to construct your robot, bind drive pose/velocity callbacks, and call `PilotRegistry.addCommand(...)` — the UI will not overwrite it. See [`libraries/ftc/README.md`](libraries/ftc/README.md).
 
 The in-app **Documentation** page (linked top-left) covers the path editor, waypoints/Bezier curves, optional per-waypoint parameters, rotation targets, subsystem triggers, and the auto workspace in more detail, with screenshots.
 

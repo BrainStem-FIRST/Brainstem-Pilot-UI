@@ -34,7 +34,6 @@ import org.brainstemfirst.pilot.frc.bezier.follower.BezierPath;
 import org.brainstemfirst.pilot.frc.model.FieldConstants;
 import org.brainstemfirst.pilot.frc.model.FieldSide;
 import org.brainstemfirst.pilot.frc.model.PilotAuto;
-import org.brainstemfirst.pilot.frc.model.PilotDrive;
 import org.brainstemfirst.pilot.frc.model.PilotPoint;
 import org.brainstemfirst.pilot.frc.model.PilotSlot;
 import org.brainstemfirst.pilot.frc.model.TriggerWatcher;
@@ -61,7 +60,10 @@ import org.brainstemfirst.pilot.frc.model.TriggerWatcher;
 public class BrainstemPilot {
 
     private static final ObjectMapper m_objectMapper = new ObjectMapper();
-    private static PilotDrive m_drive;
+    private static Supplier<Pose2d> m_pose;
+    private static Supplier<ChassisSpeeds> m_fieldRelativeSpeeds;
+    private static Consumer<ChassisSpeeds> m_runVelocity;
+    private static DoubleSupplier m_maxAngularSpeedRadPerSec;
     private static Subsystem m_driveSubsystem;
     private static BezierParams m_defaultParams;
 
@@ -75,7 +77,10 @@ public class BrainstemPilot {
      * the drive callbacks are bound.
      */
     public static void initialize(BezierParams defaultParams) {
-        m_drive = null;
+        m_pose = null;
+        m_fieldRelativeSpeeds = null;
+        m_runVelocity = null;
+        m_maxAngularSpeedRadPerSec = null;
         m_driveSubsystem = null;
         m_defaultParams = defaultParams;
     }
@@ -102,57 +107,13 @@ public class BrainstemPilot {
             DoubleSupplier maxAngularSpeedRadPerSec,
             BezierParams defaultParams) {
         m_driveSubsystem = drive;
-        m_drive = new BoundDrive(pose, fieldRelativeSpeeds, runVelocity, maxAngularSpeedRadPerSec);
+        m_pose = pose;
+        m_fieldRelativeSpeeds = fieldRelativeSpeeds;
+        m_runVelocity = runVelocity;
+        m_maxAngularSpeedRadPerSec = maxAngularSpeedRadPerSec;
         m_defaultParams = defaultParams;
     }
 
-    private static final class BoundDrive implements PilotDrive {
-        private final Supplier<Pose2d> pose;
-        private final Supplier<ChassisSpeeds> fieldRelativeSpeeds;
-        private final Consumer<ChassisSpeeds> setVelocity;
-        private final DoubleSupplier maxAngularSpeedRadPerSec;
-
-        BoundDrive(
-                Supplier<Pose2d> pose,
-                Supplier<ChassisSpeeds> fieldRelativeSpeeds,
-                Consumer<ChassisSpeeds> setVelocity,
-                DoubleSupplier maxAngularSpeedRadPerSec) {
-            this.pose = pose;
-            this.fieldRelativeSpeeds = fieldRelativeSpeeds;
-            this.setVelocity = setVelocity;
-            this.maxAngularSpeedRadPerSec = maxAngularSpeedRadPerSec;
-        }
-
-        @Override
-        public Pose2d getPose() {
-            return pose.get();
-        }
-
-        @Override
-        public ChassisSpeeds getFieldRelativeSpeeds() {
-            return fieldRelativeSpeeds.get();
-        }
-
-        @Override
-        public void runVelocity(ChassisSpeeds speeds) {
-            setVelocity.accept(speeds);
-        }
-
-        @Override
-        public double getMaxAngularSpeedRadPerSec() {
-            return maxAngularSpeedRadPerSec.getAsDouble();
-        }
-    }
-
-    // ---------------------------------------------------------------- entry points
-
-    /**
-     * Starts building a composite command from an Auto. Use {@link PilotAutoBuilder#forSide(FieldSide)}
-     * or {@link PilotAutoBuilder#mirrorSide()} before {@link PilotAutoBuilder#build()} to run on a
-     * different side.
-     *
-     * @param autoId The auto filename without {@code .auto.json} (e.g. {@code Trench_Double_Sweep})
-     */
     public static PilotAutoBuilder buildAuto(String autoId) {
         requireInitialized();
         return PilotAutoBuilder.forAuto(autoId);
@@ -169,7 +130,7 @@ public class BrainstemPilot {
     }
 
     private static void requireInitialized() {
-        if (m_drive == null || m_defaultParams == null) {
+        if (m_pose == null || m_defaultParams == null) {
             throw new IllegalStateException("BrainstemPilot must be initialized before constructing autonomous routes.");
         }
     }
@@ -213,7 +174,6 @@ public class BrainstemPilot {
         }
     }
 
-    // ---------------------------------------------------------------- resolution
 
     /** One sequence slot after chaining and mirroring. {@code segments} is null for non-positional slots. */
     static class ResolvedSlot {
@@ -245,12 +205,10 @@ public class BrainstemPilot {
         ResolvedAuto resolved = new ResolvedAuto();
         Pose2d runningPose = null;
 
-        // --- PASS 1: CHAIN ---
         for (PilotSlot slot : auto.sequence) {
             if (slot == null || slot.type == null) {
                 continue;
             }
-            // A skipped slot contributes no motion and no time, and does not move the running pose.
             if (slot.skip) {
                 continue;
             }
@@ -262,8 +220,6 @@ public class BrainstemPilot {
                 }
                 try {
                     PathParser.PathData data = PathParser.readPathData(slot.pathId);
-                    // The first waypoint snaps to the previous slot's end pose, position and heading.
-                    // Only that waypoint moves; the rest keeps its authored shape.
                     data.chainTo(runningPose);
                     if (resolved.startPose == null) {
                         resolved.startPose = new Pose2d(
@@ -287,18 +243,13 @@ public class BrainstemPilot {
                     if (point == null) {
                         continue;
                     }
-                    // The point record's rotation is the robot heading there; any rotation on the
-                    // slot itself is stale and deliberately ignored.
                     Pose2d pointPose = new Pose2d(point.x, point.y, Rotation2d.fromDegrees(point.rotation));
 
                     if (runningPose == null) {
-                        // First positional slot in the sequence: nothing to connect from yet.
                         resolved.startPose = pointPose;
                         runningPose = pointPose;
                         resolved.slots.add(new ResolvedSlot(slot, slot.pointId, null));
                     } else {
-                        // A point is a destination driven to, not a coincident joint: build a
-                        // straight connecting segment ending at the point's own heading.
                         PathParser.PathData data = PathParser.connectingSegment(
                             slot.pointId, runningPose, point, slot.params, slot.subsystemTriggers);
                         runningPose = data.endPose();
@@ -311,13 +262,10 @@ public class BrainstemPilot {
                 }
 
             } else {
-                // subsystem / wait / parallel — no motion, running pose passes through unchanged.
                 resolved.slots.add(new ResolvedSlot(slot, slot.id, null));
             }
         }
 
-        // --- PASS 2: MIRROR ---
-        // Applied to the fully chained geometry, never to individual paths beforehand.
         if (shouldMirrorSide) {
             for (ResolvedSlot resolvedSlot : resolved.slots) {
                 if (resolvedSlot.segments != null) {
@@ -332,8 +280,6 @@ public class BrainstemPilot {
         return resolved;
     }
 
-    // ---------------------------------------------------------------- building
-
     static Command buildAutoInternal(String autoId, FieldSide runSide) {
         requireInitialized();
         try {
@@ -345,7 +291,6 @@ public class BrainstemPilot {
             boolean shouldMirrorSide = runSide != getAuthoredStartSide(autoId);
             ResolvedAuto resolved = resolveAuto(auto, shouldMirrorSide, true);
 
-            // --- PASS 3: COMPOSE ---
             List<Command> autoCommandsSequence = new ArrayList<>();
             List<BezierPath[]> pathsToCache = new ArrayList<>();
 
@@ -374,7 +319,6 @@ public class BrainstemPilot {
                         autoCommandsSequence.add(parallel);
                     }
                 }
-                // A bare leading point slot has no connecting segment and contributes no command.
             }
 
             if (!pathsToCache.isEmpty()) {
@@ -412,7 +356,6 @@ public class BrainstemPilot {
         }
     }
 
-    /** Runs every sub-entry of a parallel slot simultaneously. Sub-entries may be subsystem or wait. */
     private static Command buildParallelCommand(PilotSlot slot) {
         if (slot.parallelSubs == null || slot.parallelSubs.isEmpty()) {
             return null;
@@ -435,7 +378,8 @@ public class BrainstemPilot {
     }
 
     private static Command buildPathCommand(String pathId, BezierPath[] pathSegments) {
-        BezierDrivePath driveCommand = new BezierDrivePath(pathId, m_drive, m_driveSubsystem, pathSegments);
+        BezierDrivePath driveCommand = new BezierDrivePath(
+            pathId, m_pose, m_fieldRelativeSpeeds, m_runVelocity, m_maxAngularSpeedRadPerSec, m_driveSubsystem, pathSegments);
 
         boolean hasTriggers = false;
         for (BezierPath segment : pathSegments) {
@@ -446,11 +390,9 @@ public class BrainstemPilot {
         }
 
         return hasTriggers
-            ? Commands.deadline(driveCommand, new TriggerWatcher(m_drive, pathSegments))
+            ? Commands.deadline(driveCommand, new TriggerWatcher(m_pose, pathSegments))
             : driveCommand;
     }
-
-    // ---------------------------------------------------------------- choosers
 
     /** Chooser value prefix for standalone paths — use with {@link #buildFromChooser(String, FieldSide)}. */
     public static String pathChooserValue(String pathId) {
@@ -500,8 +442,6 @@ public class BrainstemPilot {
             ? fileName.substring(0, fileName.length() - suffix.length())
             : fileName.substring(0, fileName.length() - ".json".length());
     }
-
-    // ---------------------------------------------------------------- starting pose
 
     /**
      * Returns the expected disabled/default starting pose for an auto or standalone path, with the
@@ -558,9 +498,6 @@ public class BrainstemPilot {
 
         boolean shouldMirrorSide = runSide != getAuthoredStartSide(chooserValue);
 
-        // The first positional slot is never chained onto anything, so its start pose can be read
-        // without resolving the rest of the auto. This runs on the main loop thread while disabled,
-        // so it stays a single file read rather than a full-sequence parse.
         for (PilotSlot slot : auto.sequence) {
             if (slot == null || slot.skip || slot.type == null || !slot.isPositional()) {
                 continue;
@@ -580,7 +517,6 @@ public class BrainstemPilot {
                 return Optional.of(startPoseOf(segments[0]));
             }
 
-            // A leading point slot has no connecting segment; its own pose is the start.
             PilotPoint point = loadPoint(slot.pointId);
             if (point == null) {
                 return Optional.empty();
@@ -597,8 +533,6 @@ public class BrainstemPilot {
             : segment.rotationPoints.get(0).getRotation();
         return new Pose2d(segment.curve.getStart(), heading);
     }
-
-    // ---------------------------------------------------------------- mirroring
 
     public static BezierPath[] mirrorSide(BezierPath[] paths) {
         BezierPath[] mirrored = new BezierPath[paths.length];
@@ -628,8 +562,6 @@ public class BrainstemPilot {
         mirroredPath.subsystemTriggers = new ArrayList<>(path.subsystemTriggers);
         return mirroredPath;
     }
-
-    // ---------------------------------------------------------------- loading
 
     static PilotAuto loadAuto(String autoId) throws IOException {
         File autoFile = new File(
@@ -680,7 +612,6 @@ public class BrainstemPilot {
         return null;
     }
 
-    // ---------------------------------------------------------------- drawing
 
     private static String autoCacheKey(String autoId, FieldSide runSide) {
         return autoId + "_" + runSide.name();

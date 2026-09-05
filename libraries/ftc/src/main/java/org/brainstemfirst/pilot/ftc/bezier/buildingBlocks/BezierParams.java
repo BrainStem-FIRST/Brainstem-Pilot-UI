@@ -4,13 +4,12 @@ import org.brainstemfirst.pilot.ftc.bezier.tolerance.CircleTolerance;
 import org.brainstemfirst.pilot.ftc.bezier.tolerance.Tolerance;
 
 /**
- * Per-path Bezier parameters — the values that legitimately differ between one path and the next,
- * and that come from the path JSON.
+ * Per-path Bezier parameters — copied onto each segment when the path JSON is parsed.
+ * Controller gains are not here; they live on {@code BezierFollowerConfig} and can be
+ * changed from {@code PilotAutoBase} at any time.
  *
- * <p>Controller gains are deliberately NOT here. They are global to the robot, not to a path, and
- * they live on {@code BezierFollowerConfig} so there is a single dashboard surface to tune. Keeping them
- * out of this class also means a gain edit takes effect immediately, rather than being baked into
- * every segment at auto-build time.
+ * <p>Overrides in {@code createDefaultBezierParams()} apply only if they run before
+ * paths are built (init). Editing this object afterwards does not update running segments.
  */
 public class BezierParams {
 
@@ -25,7 +24,8 @@ public class BezierParams {
     public double maxLinearSpeed = 100.0;
     public double maxTurnPower = 1.0;
 
-    public double maxTime = 10.0;
+    /** Seconds to finish this segment. {@code NaN} means unset (no timeout). Set from the UI optional param. */
+    public double maxTime = Double.NaN;
 
     public BezierParams setTolerance(Tolerance tolerance) {
         this.tolerance = tolerance;
@@ -71,5 +71,9 @@ public class BezierParams {
     public BezierParams setMaxTime(double maxTime) {
         this.maxTime = maxTime;
         return this;
+    }
+
+    public boolean hasMaxTime() {
+        return Double.isFinite(maxTime) && maxTime > 0;
     }
 }

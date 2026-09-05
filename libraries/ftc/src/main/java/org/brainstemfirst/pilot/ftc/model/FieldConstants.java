@@ -5,6 +5,8 @@ import com.acmerobotics.roadrunner.Vector2d;
 
 /** Field coordinate transforms for Brainstem Pilot paths (blue-field authoring). */
 public final class FieldConstants {
+    public enum Alliance { BLUE, RED }
+
     private FieldConstants() {}
 
     /** Mirror across the field centerline (left/right start side). */

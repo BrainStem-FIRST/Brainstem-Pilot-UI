@@ -6,16 +6,20 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.BezierCurve;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.PathFollowerUtils;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.RotationPoint;
-import org.brainstemfirst.pilot.frc.model.PilotDrive;
 import org.brainstemfirst.pilot.frc.model.FieldConstants;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 
 public class BezierDrivePath extends Command {
 
@@ -27,7 +31,10 @@ public class BezierDrivePath extends Command {
     private static final double LOOKAHEAD_T = 0.08;
 
     private String name;
-    private final PilotDrive drive;
+    private final Supplier<Pose2d> pose;
+    private final Supplier<ChassisSpeeds> fieldSpeeds;
+    private final Consumer<ChassisSpeeds> setVelocity;
+    private final DoubleSupplier maxAngVel;
     private final BezierPath[] paths;
 
     private int currentPathIndex = 0;
@@ -35,6 +42,7 @@ public class BezierDrivePath extends Command {
     private boolean finished = false;
     private Field2d field = null;
     private boolean isRed;
+    private final Timer segmentTimer = new Timer();
 
     private Rotation2d segmentEntryHeading = new Rotation2d();
     private BezierCurve activeCurve;
@@ -42,22 +50,24 @@ public class BezierDrivePath extends Command {
 
     private static final double ROTATION_START_T_EPSILON = 1e-4;
 
-    public BezierDrivePath(String name, PilotDrive drive, BezierPath... paths) {
-        this(name, drive, drive instanceof Subsystem subsystem ? subsystem : null, paths);
-    }
-
-    public BezierDrivePath(String name, PilotDrive drive, Subsystem requirement, BezierPath... paths) {
+    public BezierDrivePath(
+            String name,
+            Supplier<Pose2d> pose,
+            Supplier<ChassisSpeeds> fieldRelativeSpeeds,
+            Consumer<ChassisSpeeds> runVelocity,
+            DoubleSupplier maxAngularSpeedRadPerSec,
+            Subsystem requirement,
+            BezierPath... paths) {
         this.name = name;
-        this.drive = drive;
+        this.pose = pose;
+        this.fieldSpeeds = fieldRelativeSpeeds;
+        this.setVelocity = runVelocity;
+        this.maxAngVel = maxAngularSpeedRadPerSec;
         this.paths = paths;
 
         if (requirement != null) {
             addRequirements(requirement);
         }
-    }
-
-    public BezierDrivePath(PilotDrive drive, BezierPath... paths) {
-        this("PilotPath", drive, paths);
     }
 
     public BezierDrivePath setDrawName(String name) {
@@ -70,10 +80,11 @@ public class BezierDrivePath extends Command {
         this.currentPathIndex = 0;
         this.lastPathIndex = -1;
         this.finished = false;
-        this.segmentEntryHeading = drive.getPose().getRotation();
+        this.segmentEntryHeading = pose.get().getRotation();
         this.activeCurve = null;
         this.activeRotationPoints = List.of();
         isRed = DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red;
+        segmentTimer.restart();
     }
 
     @Override
@@ -85,16 +96,17 @@ public class BezierDrivePath extends Command {
 
         BezierPath basePath = paths[currentPathIndex];
 
-        Pose2d robotPose = drive.getPose();
+        Pose2d robotPose = pose.get();
         Translation2d robotPos = robotPose.getTranslation();
         Rotation2d robotHeading = robotPose.getRotation();
 
-        ChassisSpeeds fieldRel = drive.getFieldRelativeSpeeds();
+        ChassisSpeeds fieldRel = fieldSpeeds.get();
         Translation2d fieldVelocity = new Translation2d(fieldRel.vxMetersPerSecond, fieldRel.vyMetersPerSecond);
 
         double closestT;
         if (currentPathIndex != lastPathIndex) {
             lastPathIndex = currentPathIndex;
+            segmentTimer.restart();
             segmentEntryHeading = robotHeading;
             activeCurve = createSegmentCurve(basePath.curve, robotPos);
             activeRotationPoints = createSegmentRotationPoints(basePath.rotationPoints);
@@ -131,22 +143,19 @@ public class BezierDrivePath extends Command {
             passPosition = dot < 0;
         }
 
-        if ((inPositionTolerance && inHeadingTolerance) || passPosition) {
+        boolean timedOut = basePath.params.hasMaxTime() && segmentTimer.get() > basePath.params.maxTime;
+        if ((inPositionTolerance && inHeadingTolerance) || passPosition || timedOut) {
             currentPathIndex++;
 
             if (currentPathIndex >= paths.length) {
                 finished = true;
-                drive.runVelocity(new ChassisSpeeds(0, 0, 0));
+                setVelocity.accept(new ChassisSpeeds(0, 0, 0));
             }
             return;
         }
 
         Translation2d lookaheadPoint = PathFollowerUtils.getLookaheadPoint(activeCurve, closestT, LOOKAHEAD_T);
 
-        // The curve-projected remaining length collapses to 0 once the robot's closest point
-        // reaches/overshoots t=1, even if the robot is still far from the actual end point
-        // (e.g. after overshooting). Floor it with the straight-line distance to the end point
-        // so the proportional speed term never vanishes while real position error remains.
         double totalRemainingLength = Math.max(
                 PathFollowerUtils.estimateRemainingLength(activeCurve, closestT, REMAINING_LENGTH_SAMPLES),
                 robotToEndPoint.getNorm()
@@ -157,10 +166,6 @@ public class BezierDrivePath extends Command {
             totalRemainingLength += PathFollowerUtils.estimateRemainingLength(nextCurve, 0, REMAINING_LENGTH_SAMPLES);
         }
 
-        // Unsigned remaining distance is correct while the robot is still short of the endpoint,
-        // and correct for every segment that has another one after it. On the final segment,
-        // once the robot reaches or passes the end of the curve, the sign has to come from which
-        // side of the endpoint it is actually on.
         double signedRemainingLength = totalRemainingLength;
         if (currentPathIndex == paths.length - 1 && closestT >= 1.0 - 1e-3) {
             signedRemainingLength = PathFollowerUtils.projectOnTangent(
@@ -181,11 +186,9 @@ public class BezierDrivePath extends Command {
                     BezierFollowerConfig.velKv,
                     BezierFollowerConfig.velKs,
                     BezierFollowerConfig.velKp,
-                    BezierFollowerConfig.crossTrackKp
+                    BezierFollowerConfig.crossTrackKp,
+                    basePath.params.minLinearSpeed
             );
-            // No tolerance dampening here: the profile already shapes the approach, and scaling
-            // the command down near the target would blunt the braking term exactly when it
-            // matters most.
             linearVector = driveVector;
         } else {
             driveVector = PathFollowerUtils.calculateDriveVector(
@@ -223,10 +226,10 @@ public class BezierDrivePath extends Command {
         ChassisSpeeds fieldRelativeSpeeds = new ChassisSpeeds(
             linearVector.getX(),
             linearVector.getY(),
-            rotationPower * drive.getMaxAngularSpeedRadPerSec()
+            rotationPower * maxAngVel.getAsDouble()
         );
 
-        drive.runVelocity(ChassisSpeeds.fromFieldRelativeSpeeds(fieldRelativeSpeeds, robotHeading));
+        setVelocity.accept(ChassisSpeeds.fromFieldRelativeSpeeds(fieldRelativeSpeeds, robotHeading));
 
         if (field != null) {
             field.getObject(preface() + "LinearVector").setPoses(
@@ -255,7 +258,7 @@ public class BezierDrivePath extends Command {
 
     @Override
     public void end(boolean interrupted) {
-        drive.runVelocity(new ChassisSpeeds(0, 0, 0));
+        setVelocity.accept(new ChassisSpeeds(0, 0, 0));
     }
 
     @Override

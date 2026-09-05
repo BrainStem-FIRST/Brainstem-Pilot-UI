@@ -7,7 +7,7 @@ import {
 import FieldCanvas from '../components/autobuilder/FieldCanvas';
 import SimCanvas from '../components/autobuilder/SimCanvas';
 import WaypointSidebar, { OptionalParamsSection } from '../components/autobuilder/WaypointSidebar';
-import { generateTrajectory, buildAutoChain, mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis } from '../lib/trajectoryMath';
+import { generateTrajectory, buildAutoChain, attachChainTrajectories, mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis } from '../lib/trajectoryMath';
 import { resolveVisibleVisuals, chainToSegments, wrapAngle } from '../lib/simSegments';
 import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
@@ -684,13 +684,7 @@ export default function AutoWorkspace() {
   const chain = useMemo(() => {
     if (!auto) return [];
     const resolved = buildAutoChain(auto.sequence ?? [], { paths: allPaths, points: allPoints });
-    return resolved.map(slot => {
-      if (!slot.chainedWaypoints || slot.chainedWaypoints.length < 2) return slot;
-      const constraints = slot.type === 'path' ? (slot.path?.constraints?.maxVel ? slot.path.constraints : defaultConstraints) : defaultConstraints;
-      const rotationTargets = slot.type === 'path' ? (slot.path?.rotationTargets ?? []) : [];
-      const trajectory = generateTrajectory(slot.chainedWaypoints, constraints, rotationTargets);
-      return { ...slot, trajectory };
-    });
+    return attachChainTrajectories(resolved, defaultConstraints);
   }, [auto, allPaths, allPoints, defaultConstraints]);
 
   const selectedSlot = useMemo(() => (auto?.sequence ?? []).find(s => s.id === selectedSlotId) ?? null, [auto, selectedSlotId]);

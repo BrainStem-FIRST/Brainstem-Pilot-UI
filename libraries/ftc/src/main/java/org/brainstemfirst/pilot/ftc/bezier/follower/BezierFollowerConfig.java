@@ -1,9 +1,9 @@
 package org.brainstemfirst.pilot.ftc.bezier.follower;
 
-import com.acmerobotics.dashboard.config.Config;
-
-/** Dashboard-tunable Bézier follower gains. Not team-robot specific. */
-@Config
+/**
+ * Global Bézier follower gains. Set these in {@code PilotAutoBase.configureFollower()}.
+ * They are read every loop — changing them in team code takes effect immediately.
+ */
 public class BezierFollowerConfig {
     public static boolean useVelocityProfile = true;
     public static double velKv = 0.014;

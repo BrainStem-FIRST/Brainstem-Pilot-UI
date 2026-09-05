@@ -72,22 +72,25 @@ export function ftcOpmodeJavaFilename(displayName) {
 export function buildPilotAutoBaseJavaContent() {
   return `package ${TEAM_BASE_PACKAGE};
 
-import com.acmerobotics.dashboard.canvas.Canvas;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.acmerobotics.roadrunner.Pose2d;
 
 import org.brainstemfirst.pilot.ftc.PilotOpMode;
 import org.brainstemfirst.pilot.ftc.bezier.follower.BezierFollowerConfig;
-import org.brainstemfirst.pilot.ftc.model.PilotAlliance;
-import org.brainstemfirst.pilot.ftc.model.PilotDrive;
+import org.brainstemfirst.pilot.ftc.model.FieldConstants;
+import org.brainstemfirst.pilot.ftc.bezier.follower.BezierDrivePath;
+
+import com.acmerobotics.roadrunner.PoseVelocity2d;
+
+import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
+
 
 /**
  * ${TEAM_BASE_MARKER}.
  * Wire your robot, drive, and {@code PilotRegistry.addCommand} calls here.
  * Generated OpModes in {@code opmodeAutos/} extend this class.
- *
- * Road Runner feedforward ({@code kV}/{@code kS}/{@code kA}) lives on your
- * {@code MecanumDrive.PARAMS}, not here.
  */
 public abstract class PilotAutoBase extends PilotOpMode {
     protected PilotAutoBase(String autoId) {
@@ -95,34 +98,57 @@ public abstract class PilotAutoBase extends PilotOpMode {
         configureFollower();
     }
 
-    /** Bézier follower gains. FTC Dashboard can still override these at runtime. */
+    /** Bézier follower gains. Read every loop — edit these values here. */
     private void configureFollower() {
+        // Use velocity profile for smoother motion.
         BezierFollowerConfig.useVelocityProfile = true;
         BezierFollowerConfig.velKv = 0.014;
         BezierFollowerConfig.velKs = 0.03;
         BezierFollowerConfig.velKp = 0.05;
-        BezierFollowerConfig.crossTrackKp = 0.05;
-        BezierFollowerConfig.speedkP = 0.05;
-        BezierFollowerConfig.speedkF = 0.05;
-        BezierFollowerConfig.speedkD = 0.0;
-        BezierFollowerConfig.correctivePower = 0.7;
-        BezierFollowerConfig.headingkP = 0.05;
-        BezierFollowerConfig.headingkF = 0.05;
+
+        // Set cruise velocity/profile decel while tuning. 
         BezierFollowerConfig.overrideCruiseVel = false;
         BezierFollowerConfig.cruiseVel = 30;
         BezierFollowerConfig.overrideProfileDecel = false;
         BezierFollowerConfig.profileDecel = 40;
+
+        // Cross-track error gains.
+        BezierFollowerConfig.crossTrackKp = 0.05;
+        BezierFollowerConfig.correctivePower = 0.7;
+
+        // Heading error gains.
+        BezierFollowerConfig.headingkP = 0.05;
+        BezierFollowerConfig.headingkF = 0.05;
+
+        // Speed error gains (ONLY used if useVelocityProfile is false)
+        BezierFollowerConfig.speedkP = 0.05;
+        BezierFollowerConfig.speedkF = 0.05;
+        BezierFollowerConfig.speedkD = 0.0;
     }
 
     @Override
-    protected void setupRobot(PilotAlliance alliance, Pose2d startPose) {
+    protected void setupRobot(FieldConstants.Alliance alliance, Pose2d startPose) {
         // Construct your robot and seed odometry to startPose.
     }
 
     @Override
-    protected PilotDrive getDrive() {
-        // Return your drivetrain. Road Runner MecanumDrive can implement PilotDrive.
-        throw new IllegalStateException("Implement getDrive() in PilotAutoBase");
+    protected Supplier<Pose2d> pose() {
+        throw new IllegalStateException("Bind pose() in PilotAutoBase, e.g. drive::getPose");
+    }
+
+    @Override
+    protected Supplier<PoseVelocity2d> lastVelRobot() {
+        throw new IllegalStateException("Bind lastVelRobot() in PilotAutoBase, e.g. drive::lastVelRobot");
+    }
+
+    @Override
+    protected Consumer<PoseVelocity2d> setDrivePowers() {
+        throw new IllegalStateException("Bind setDrivePowers() in PilotAutoBase, e.g. drive::setDrivePowers");
+    }
+
+    @Override
+    protected DoubleSupplier maxAngVel() {
+        throw new IllegalStateException("Bind maxAngVel() in PilotAutoBase, e.g. drive::maxAngVel");
     }
 
     @Override
@@ -133,11 +159,16 @@ public abstract class PilotAutoBase extends PilotOpMode {
     @Override
     protected boolean updateRobot(TelemetryPacket packet) {
         // Subsystem loop + localizer update. Return true to keep running.
-        return true;
-    }
 
-    @Override
-    protected void drawRobot(Canvas canvas) {
+        // Add telemetry for the BezierDrivePath status.
+        BezierDrivePath.Status s = BezierDrivePath.status();
+        telemetry.addData("target X", s.targetPoint.x);
+        telemetry.addData("target Y", s.targetPoint.y);
+        telemetry.addData("heading rad", s.targetHeadingRad);
+        telemetry.addData("remaining", s.remainingLength);
+        telemetry.update();
+
+        return true;
     }
 }
 `;

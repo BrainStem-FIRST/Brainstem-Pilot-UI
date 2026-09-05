@@ -38,7 +38,6 @@ public class PathParser {
     /** Highest {@code schemaVersion} this reader understands. Newer files are refused, not guessed at. */
     public static final int SUPPORTED_SCHEMA_VERSION = 2;
 
-    // ---------------------------------------------------------------- raw model
 
     /** One authored waypoint. Control handles are null at the ends of a path. */
     public static class Waypoint {
@@ -147,8 +146,6 @@ public class PathParser {
         }
     }
 
-    // ---------------------------------------------------------------- reading
-
     /** Reads a path file into its raw, unchained geometry. */
     public static PathData readPathData(String pathId) throws IOException {
         File pathFile = resolvePathFile(pathId);
@@ -169,7 +166,6 @@ public class PathParser {
         data.startSide = FieldSide.fromStartSideKey(
             root.hasNonNull("startSide") ? root.get("startSide").asText(null) : null);
 
-        // constraints is populated on current files, but older ones carry {} — fall back to defaults.
         JsonNode constraints = root.get("constraints");
         if (constraints != null && constraints.hasNonNull("maxVel")) {
             data.maxVel = constraints.get("maxVel").asDouble() * scale;
@@ -185,7 +181,6 @@ public class PathParser {
                 wpNode.path("rotation").asDouble(0.0));
             wp.prevControl = readControl(wpNode.get("prevControl"), scale);
             wp.nextControl = readControl(wpNode.get("nextControl"), scale);
-            // waypointParams is no longer written; params live inline on each waypoint.
             wp.params = wpNode.get("params");
             data.waypoints.add(wp);
         }
@@ -234,8 +229,6 @@ public class PathParser {
             root.hasNonNull("startSide") ? root.get("startSide").asText(null) : null);
     }
 
-    // ---------------------------------------------------------------- building
-
     /**
      * Converts chained geometry into follower segments, distributing the path's rotation timeline
      * and subsystem triggers across them by arc length.
@@ -281,7 +274,6 @@ public class PathParser {
             totalPathLength += segLength;
         }
 
-        // --- GLOBAL ROTATION TIMELINE ---
         List<GlobalRotation> globalRotations = new ArrayList<>();
         globalRotations.add(new GlobalRotation(0.0, Rotation2d.fromDegrees(data.first().rotationDeg)));
         for (Marker rotTarget : data.rotationTargets) {
@@ -291,7 +283,6 @@ public class PathParser {
         globalRotations.add(new GlobalRotation(totalPathLength, Rotation2d.fromDegrees(data.last().rotationDeg)));
         globalRotations.sort((r1, r2) -> Double.compare(r1.distanceMeters, r2.distanceMeters));
 
-        // --- DISTRIBUTE ROTATIONS PER SEGMENT ---
         List<ArrayList<RotationPoint>> rotationPointsPerSegment = new ArrayList<>();
         for (int i = 0; i < segmentCount; i++) {
             rotationPointsPerSegment.add(new ArrayList<>());
@@ -317,14 +308,12 @@ public class PathParser {
             currentSegmentStartDist = currentSegmentEndDist;
         }
 
-        // --- PER-SEGMENT PARAMS (from the segment's END waypoint) ---
         BezierParams[] segmentParams = new BezierParams[segmentCount];
         for (int i = 0; i < segmentCount; i++) {
             segmentParams[i] = buildParams(
                 data.waypoints.get(i + 1).params, defaultParams, maxLinearVelocity, maxAcceleration);
         }
 
-        // --- SUBSYSTEM TRIGGERS ---
         List<List<BezierPath.SubsystemTriggerPoint>> triggersPerSegment = new ArrayList<>();
         for (int i = 0; i < segmentCount; i++) {
             triggersPerSegment.add(new ArrayList<>());
@@ -357,8 +346,6 @@ public class PathParser {
         return pathSegments;
     }
 
-    // ---------------------------------------------------------------- helpers
-
     private static BezierParams buildParams(
             JsonNode params, BezierParams defaultParams, double maxLinearVelocity, double maxAcceleration) {
         BezierParams bp = new BezierParams()
@@ -384,10 +371,10 @@ public class PathParser {
         if (params.has("headingTol")) { head = Rotation2d.fromDegrees(params.get("headingTol").asDouble()); toleranceOverridden = true; }
         if (toleranceOverridden) bp.setTolerance(new CircleTolerance(dist, head));
         if (params.has("minLinearSpeed")) bp.setMinLinearSpeed(params.get("minLinearSpeed").asDouble());
-        // An absolute speed in the file's units (m/s), clamped by the path's own limit —
-        // not a fraction. The editor treats it as min(maxVel, value).
         if (params.has("maxLinearSpeed")) {
-            bp.setMaxLinearSpeed(Math.min(maxLinearVelocity, params.get("maxLinearSpeed").asDouble()));
+            double maxSpeed = Math.min(maxLinearVelocity, params.get("maxLinearSpeed").asDouble());
+            bp.setMaxLinearSpeed(maxSpeed);
+            bp.setProfileCruiseVel(maxSpeed);
         }
         if (params.has("maxTurnPower")) bp.setMaxTurnPower(params.get("maxTurnPower").asDouble());
         if (params.has("maxTime")) bp.setMaxTime(params.get("maxTime").asDouble());

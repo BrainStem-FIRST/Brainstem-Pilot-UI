@@ -2,7 +2,6 @@ package org.brainstemfirst.pilot.ftc.bezier.follower;
 
 import androidx.annotation.NonNull;
 
-import com.acmerobotics.dashboard.canvas.Canvas;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.Pose2d;
@@ -11,15 +10,15 @@ import com.acmerobotics.roadrunner.Vector2d;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.brainstemfirst.pilot.ftc.model.FieldConstants;
-import org.brainstemfirst.pilot.ftc.model.PilotAlliance;
-import org.brainstemfirst.pilot.ftc.model.PilotDrive;
-import org.brainstemfirst.pilot.ftc.model.PilotGeometry;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.BezierCurve;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.PathFollowerUtils;
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.RotationPoint;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 
 public class BezierDrivePath implements Action {
 
@@ -30,20 +29,22 @@ public class BezierDrivePath implements Action {
     private static final int REMAINING_LENGTH_SAMPLES = 30;
     private static final double LOOKAHEAD_T = 0.08;
 
-    private String name;
-    private final PilotDrive drive;
+    private static final Status STATUS = new Status();
+
+    private final String name;
+    private final Supplier<Pose2d> pose;
+    private final Supplier<PoseVelocity2d> lastVelRobot;
+    private final Consumer<PoseVelocity2d> setDrivePowers;
+    private final DoubleSupplier maxAngVel;
     private final BezierPath[] paths;
-    private final PilotAlliance alliance;
+    private final FieldConstants.Alliance alliance;
 
     private int currentPathIndex = 0;
     private int lastPathIndex = -1;
     private boolean finished = false;
     private boolean initialized = false;
-    private Canvas canvas = null;
     private boolean isRed;
-
-    private final ElapsedTime loopTimer = new ElapsedTime();
-    private double loopMs = 0.0;
+    private final ElapsedTime segmentTimer = new ElapsedTime();
 
     private double segmentEntryHeadingRad = 0.0;
     private BezierCurve activeCurve;
@@ -51,54 +52,97 @@ public class BezierDrivePath implements Action {
 
     private static final double ROTATION_START_T_EPSILON = 1e-4;
 
-    public BezierDrivePath(String name, PilotDrive drive, PilotAlliance alliance, BezierPath... paths) {
+    /**
+     * Latest follower sample. Written every loop of the active path action.
+     * Read from team code with {@link #status()}.
+     */
+    public static final class Status {
+        public String pathName = "";
+        public Vector2d robotPosition = new Vector2d(0, 0);
+        public Vector2d closestPoint = new Vector2d(0, 0);
+        public Vector2d targetPoint = new Vector2d(0, 0);
+        public Vector2d pathEnd = new Vector2d(0, 0);
+        public double targetHeadingRad;
+        public double closestT;
+        public double remainingLength;
+        public boolean finished;
+        public boolean timedOut;
+    }
+
+    public BezierDrivePath(
+            String name,
+            Supplier<Pose2d> pose,
+            Supplier<PoseVelocity2d> lastVelRobot,
+            Consumer<PoseVelocity2d> setDrivePowers,
+            DoubleSupplier maxAngVel,
+            FieldConstants.Alliance alliance,
+            BezierPath... paths) {
         this.name = name;
-        this.drive = drive;
+        this.pose = pose;
+        this.lastVelRobot = lastVelRobot;
+        this.setDrivePowers = setDrivePowers;
+        this.maxAngVel = maxAngVel;
         this.alliance = alliance;
         this.paths = paths;
     }
 
-    public BezierDrivePath(PilotDrive drive, PilotAlliance alliance, BezierPath... paths) {
-        this("PilotPath", drive, alliance, paths);
+    /** Current path-follow sample. Safe to read from {@code PilotAutoBase.updateRobot}. */
+    public static Status status() {
+        return STATUS;
     }
 
-    public BezierDrivePath setDrawName(String name) {
-        this.name = name;
-        return this;
+    public static Vector2d getTargetPoint() {
+        return STATUS.targetPoint;
+    }
+
+    public static Vector2d getClosestPoint() {
+        return STATUS.closestPoint;
+    }
+
+    public static Vector2d getPathEnd() {
+        return STATUS.pathEnd;
+    }
+
+    public static double getTargetHeadingRad() {
+        return STATUS.targetHeadingRad;
+    }
+
+    public static boolean isFinished() {
+        return STATUS.finished;
     }
 
     private void initialize() {
         currentPathIndex = 0;
         lastPathIndex = -1;
         finished = false;
-        segmentEntryHeadingRad = drive.getPose().heading.toDouble();
+        segmentEntryHeadingRad = pose.get().heading.toDouble();
         activeCurve = null;
         activeRotationPoints = List.of();
-        isRed = alliance == PilotAlliance.RED;
+        isRed = alliance == FieldConstants.Alliance.RED;
+        STATUS.pathName = name;
+        STATUS.finished = false;
+        STATUS.timedOut = false;
     }
 
-    private void execute(TelemetryPacket packet) {
-        loopMs = loopTimer.milliseconds();
-        loopTimer.reset();
-
+    private void execute() {
         if (finished || currentPathIndex >= paths.length) {
             finished = true;
+            STATUS.finished = true;
             return;
         }
 
         BezierPath basePath = paths[currentPathIndex];
 
-        Pose2d robotPose = drive.getPose();
+        Pose2d robotPose = pose.get();
         Vector2d robotPos = robotPose.position;
         double robotHeadingRad = robotPose.heading.toDouble();
 
-        // Cached from the opmode's updatePoseEstimate() call — updating the localizer a second
-        // time in the same cycle yields a near-zero dt and a meaningless velocity.
-        Vector2d fieldVelocity = PilotGeometry.rotate(drive.lastVelRobot().linearVel, robotHeadingRad);
+        Vector2d fieldVelocity = PathFollowerUtils.rotate(lastVelRobot.get().linearVel, robotHeadingRad);
 
         double closestT;
         if (currentPathIndex != lastPathIndex) {
             lastPathIndex = currentPathIndex;
+            segmentTimer.reset();
             segmentEntryHeadingRad = robotHeadingRad;
             activeCurve = createSegmentCurve(basePath.curve, robotPos);
             activeRotationPoints = createSegmentRotationPoints(basePath.rotationPoints);
@@ -115,6 +159,8 @@ public class BezierDrivePath implements Action {
 
         Vector2d endPoint = activeCurve.getEnd();
         Vector2d robotToEndPoint = endPoint.minus(robotPos);
+        Vector2d closestPoint = activeCurve.getPoint(closestT);
+        Vector2d lookaheadPoint = PathFollowerUtils.getLookaheadPoint(activeCurve, closestT, LOOKAHEAD_T);
 
         double targetHeadingRad;
         if (!activeRotationPoints.isEmpty()) {
@@ -123,7 +169,7 @@ public class BezierDrivePath implements Action {
             targetHeadingRad = robotHeadingRad;
         }
 
-        double headingErrorRad = PilotGeometry.absHeadingError(targetHeadingRad, robotHeadingRad);
+        double headingErrorRad = PathFollowerUtils.absHeadingError(targetHeadingRad, robotHeadingRad);
 
         boolean inPositionTolerance = basePath.params.tolerance.inPositionTolerance(robotToEndPoint);
         boolean inHeadingTolerance = basePath.params.tolerance.inHeadingTolerance(headingErrorRad);
@@ -135,32 +181,20 @@ public class BezierDrivePath implements Action {
             passPosition = dot < 0;
         }
 
-        if (packet != null) {
-            packet.put(preface() + "/end point x", endPoint.x);
-            packet.put(preface() + "/end point y", endPoint.y);
-            packet.put(preface() + "/current point x", robotPos.x);
-            packet.put(preface() + "/current point y", robotPos.y);
-            packet.put(preface() + "/in pos tol", inPositionTolerance);
-            packet.put(preface() + "/in heading tol", inHeadingTolerance);
-            packet.put(preface() + "/loop ms", loopMs);
-        }
+        publishStatus(robotPos, closestPoint, lookaheadPoint, endPoint, targetHeadingRad, closestT, 0, false);
 
-        if ((inPositionTolerance && inHeadingTolerance) || passPosition) {
+        boolean timedOut = basePath.params.hasMaxTime() && segmentTimer.seconds() > basePath.params.maxTime;
+        if ((inPositionTolerance && inHeadingTolerance) || passPosition || timedOut) {
             currentPathIndex++;
+            STATUS.timedOut = timedOut;
 
             if (currentPathIndex >= paths.length) {
                 finished = true;
-                drive.setDrivePowers(new PoseVelocity2d(new Vector2d(0, 0), 0));
+                STATUS.finished = true;
+                setDrivePowers.accept(new PoseVelocity2d(new Vector2d(0, 0), 0));
             }
             return;
         }
-
-        Vector2d lookaheadPoint = PathFollowerUtils.getLookaheadPoint(activeCurve, closestT, LOOKAHEAD_T);
-
-        // The curve-projected remaining length collapses to 0 once the robot's closest point
-        // reaches/overshoots t=1, even if the robot is still far from the actual end point
-        // (e.g. after overshooting). Floor it with the straight-line distance to the end point
-        // so the proportional speed term never vanishes while real position error remains.
 
         double totalRemainingLength = Math.max(
                 PathFollowerUtils.estimateRemainingLength(activeCurve, closestT, REMAINING_LENGTH_SAMPLES),
@@ -172,15 +206,13 @@ public class BezierDrivePath implements Action {
             totalRemainingLength += PathFollowerUtils.estimateRemainingLength(nextCurve, 0, REMAINING_LENGTH_SAMPLES);
         }
 
-        // Unsigned remaining distance is correct while the robot is still short of the endpoint,
-        // and correct for every segment that has another one after it. On the final segment,
-        // once the robot reaches or passes the end of the curve, the sign has to come from which
-        // side of the endpoint it is actually on.
         double signedRemainingLength = totalRemainingLength;
         if (currentPathIndex == paths.length - 1 && closestT >= 1.0 - 1e-3) {
             signedRemainingLength = PathFollowerUtils.projectOnTangent(
                     activeCurve, closestT, robotToEndPoint);
         }
+
+        publishStatus(robotPos, closestPoint, lookaheadPoint, endPoint, targetHeadingRad, closestT, totalRemainingLength, false);
 
         Vector2d driveVector;
         Vector2d linearVector;
@@ -196,11 +228,10 @@ public class BezierDrivePath implements Action {
                     BezierFollowerConfig.velKv,
                     BezierFollowerConfig.velKs,
                     BezierFollowerConfig.velKp,
-                    BezierFollowerConfig.crossTrackKp
+                    BezierFollowerConfig.crossTrackKp,
+                    basePath.params.minLinearSpeed
             );
-            // No tolerance dampening here: the profile already shapes the approach, and scaling
-            // the command down near the target would blunt the braking term exactly when it
-            // matters most.
+
             linearVector = driveVector;
         } else {
             driveVector = PathFollowerUtils.calculateDriveVector(
@@ -235,48 +266,44 @@ public class BezierDrivePath implements Action {
 
         rotationPower = Math.max(-basePath.params.maxTurnPower, Math.min(basePath.params.maxTurnPower, rotationPower));
 
-        Vector2d robotRelativeLinear = PilotGeometry.fieldToRobot(linearVector, robotHeadingRad);
-        drive.setDrivePowers(new PoseVelocity2d(
+        Vector2d robotRelativeLinear = PathFollowerUtils.fieldToRobot(linearVector, robotHeadingRad);
+        setDrivePowers.accept(new PoseVelocity2d(
                 robotRelativeLinear,
-                rotationPower * drive.maxAngVel()
+                rotationPower * maxAngVel.getAsDouble()
         ));
-
-        if (packet != null) {
-            packet.put(preface() + "/is finished", finished);
-            packet.put(preface() + "/axial power", robotRelativeLinear.x);
-            packet.put(preface() + "/lateral power", robotRelativeLinear.y);
-            packet.put(preface() + "/rotation power", rotationPower);
-            packet.put(preface() + "/remaining length", totalRemainingLength);
-            packet.put(preface() + "/commanded speed", PathFollowerUtils.commandedSpeed(
-                    totalRemainingLength, BezierFollowerConfig.speedkP, BezierFollowerConfig.speedkF));
-            packet.put(preface() + "/tangential vel", PathFollowerUtils.tangentialVelocity(
-                    activeCurve, closestT, fieldVelocity));
-            packet.put(preface() + "/linear power", linearVector.norm());
-            packet.put(preface() + "/signed remaining", signedRemainingLength);
-            packet.put(preface() + "/target vel", Math.signum(signedRemainingLength)
-                    * PathFollowerUtils.profileTargetVelocity(
-                            Math.abs(signedRemainingLength), cruiseVel(basePath), profileDecel(basePath)));
-        }
-
-        if (canvas != null) {
-            canvas.setStrokeWidth(1);
-            canvas.strokeLine(robotPos.x, robotPos.y, robotPos.x + linearVector.x, robotPos.y + linearVector.y);
-            canvas.strokeLine(robotPos.x, robotPos.y, robotPos.x + driveVector.x, robotPos.y + driveVector.y);
-        }
     }
 
-    /** Path's own `maxVel`, unless a tuning override is forcing one cruise speed everywhere. */
+    private void publishStatus(
+            Vector2d robotPos,
+            Vector2d closestPoint,
+            Vector2d targetPoint,
+            Vector2d pathEnd,
+            double targetHeadingRad,
+            double closestT,
+            double remainingLength,
+            boolean timedOut) {
+        STATUS.pathName = name;
+        STATUS.robotPosition = robotPos;
+        STATUS.closestPoint = closestPoint;
+        STATUS.targetPoint = targetPoint;
+        STATUS.pathEnd = pathEnd;
+        STATUS.targetHeadingRad = targetHeadingRad;
+        STATUS.closestT = closestT;
+        STATUS.remainingLength = remainingLength;
+        STATUS.finished = finished;
+        STATUS.timedOut = timedOut;
+    }
+
     private static double cruiseVel(BezierPath path) {
         return BezierFollowerConfig.overrideCruiseVel ? BezierFollowerConfig.cruiseVel : path.params.profileCruiseVel;
     }
 
-    /** Path's own `maxAccel`, unless a tuning override is forcing one decel everywhere. */
     private static double profileDecel(BezierPath path) {
         return BezierFollowerConfig.overrideProfileDecel ? BezierFollowerConfig.profileDecel : path.params.profileDecel;
     }
 
     private void end() {
-        drive.setDrivePowers(new PoseVelocity2d(new Vector2d(0, 0), 0));
+        setDrivePowers.accept(new PoseVelocity2d(new Vector2d(0, 0), 0));
     }
 
     @Override
@@ -286,21 +313,13 @@ public class BezierDrivePath implements Action {
             initialized = true;
         }
 
-        execute(packet);
+        execute();
 
         if (finished) {
             end();
             return false;
         }
         return true;
-    }
-
-    public void draw(Canvas canvas) {
-        if (canvas == null) return;
-        this.canvas = canvas;
-        for (BezierPath path : paths) {
-            applyAllianceTransform(path.curve).draw(canvas, 20);
-        }
     }
 
     private BezierCurve createSegmentCurve(BezierCurve baseCurve, Vector2d robotPos) {
@@ -325,7 +344,7 @@ public class BezierDrivePath implements Action {
             }
             double headingRad = rotationPoint.getHeadingRad();
             if (isRed) {
-                headingRad = PilotGeometry.flipHeadingForRed(headingRad);
+                headingRad = PathFollowerUtils.flipHeadingForRed(headingRad);
             }
             segmentRotationPoints.add(new RotationPoint(headingRad, rotationPoint.getT()));
         }
@@ -342,9 +361,5 @@ public class BezierDrivePath implements Action {
                 FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getControl2())),
                 FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getEnd()))
         );
-    }
-
-    public String preface() {
-        return "BezierDrive/" + name;
     }
 }

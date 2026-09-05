@@ -1,36 +1,29 @@
 package org.brainstemfirst.pilot.ftc;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.canvas.Canvas;
-import com.acmerobotics.dashboard.config.Config;
-import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.ParallelAction;
 import com.acmerobotics.roadrunner.Pose2d;
+import com.acmerobotics.roadrunner.PoseVelocity2d;
 import com.acmerobotics.roadrunner.ftc.Actions;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.BezierParams;
 import org.brainstemfirst.pilot.ftc.bezier.follower.BezierFollowerConfig;
 import org.brainstemfirst.pilot.ftc.bezier.tolerance.CircleTolerance;
+import org.brainstemfirst.pilot.ftc.model.FieldConstants;
 import org.brainstemfirst.pilot.ftc.reader.BrainstemPilot;
-import org.brainstemfirst.pilot.ftc.model.PilotAlliance;
-import org.brainstemfirst.pilot.ftc.model.PilotDrive;
-import org.brainstemfirst.pilot.ftc.model.PilotLog;
 
-/**
- * Generic Pilot OpMode loop. Team {@code PilotAutoBase} (created once in the
- * FTC project folder by the editor) subclasses this and supplies robot wiring.
- * Generated OpModes extend the team class, not this one.
- */
-@Config
+import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
+
 public abstract class PilotOpMode extends LinearOpMode {
-    public static PilotAlliance defaultAlliance = PilotAlliance.BLUE;
+    public static FieldConstants.Alliance defaultAlliance = FieldConstants.Alliance.BLUE;
     public static double maxLinearSpeed = 60;
 
     private final String autoId;
-    private PilotAlliance alliance;
+    private FieldConstants.Alliance alliance;
     private BezierParams defaultParams;
     private Action pilotAuto;
     private Pose2d startPose;
@@ -39,20 +32,21 @@ public abstract class PilotOpMode extends LinearOpMode {
         this.autoId = autoId;
     }
 
-    protected abstract void setupRobot(PilotAlliance alliance, Pose2d startPose);
+    protected abstract void setupRobot(FieldConstants.Alliance alliance, Pose2d startPose);
 
-    protected abstract PilotDrive getDrive();
+    protected abstract Supplier<Pose2d> pose();
+
+    protected abstract Supplier<PoseVelocity2d> lastVelRobot();
+
+    protected abstract Consumer<PoseVelocity2d> setDrivePowers();
+
+    protected abstract DoubleSupplier maxAngVel();
 
     protected abstract void registerCommands();
 
-    /** Called once after START, before the auto action runs. */
     protected void onOpModeStart() {}
 
-    /** Robot/subsystem loop body. Pose updates belong here. */
     protected abstract boolean updateRobot(TelemetryPacket packet);
-
-    /** Optional field overlay (robot outline, etc.). Path overlay is drawn by the library. */
-    protected void drawRobot(Canvas canvas) {}
 
     protected BezierParams createDefaultBezierParams() {
         return new BezierParams()
@@ -66,7 +60,7 @@ public abstract class PilotOpMode extends LinearOpMode {
         return autoId;
     }
 
-    protected final PilotAlliance alliance() {
+    protected final FieldConstants.Alliance alliance() {
         return alliance;
     }
 
@@ -76,20 +70,16 @@ public abstract class PilotOpMode extends LinearOpMode {
 
     @Override
     public void runOpMode() throws InterruptedException {
-        telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
-        telemetry.setMsTransmissionInterval(11);
-        PilotLog.set(telemetry);
-
         defaultParams = createDefaultBezierParams();
-        BrainstemPilot.prepareAssets(hardwareMap.appContext, defaultParams);
+        BrainstemPilot.initialize(hardwareMap.appContext, defaultParams);
         alliance = defaultAlliance;
         applyAllianceConfiguration();
 
         while (!isStarted() && !isStopRequested()) {
-            PilotAlliance previousAlliance = alliance;
+            FieldConstants.Alliance previousAlliance = alliance;
 
-            if (gamepad1.xWasPressed()) alliance = PilotAlliance.BLUE;
-            if (gamepad1.bWasPressed()) alliance = PilotAlliance.RED;
+            if (gamepad1.xWasPressed()) alliance = FieldConstants.Alliance.BLUE;
+            if (gamepad1.bWasPressed()) alliance = FieldConstants.Alliance.RED;
             if (alliance != previousAlliance) applyAllianceConfiguration();
 
             telemetry.addData("Auto", autoId);
@@ -111,14 +101,18 @@ public abstract class PilotOpMode extends LinearOpMode {
                 .orElse(new Pose2d(0, 0, 0));
         setupRobot(alliance, startPose);
         registerCommands();
-        BrainstemPilot.initialize(hardwareMap.appContext, getDrive(), alliance, defaultParams);
+        BrainstemPilot.initialize(
+                hardwareMap.appContext,
+                pose(),
+                lastVelRobot(),
+                setDrivePowers(),
+                maxAngVel(),
+                alliance,
+                defaultParams);
         pilotAuto = BrainstemPilot.buildAuto(autoId).build();
     }
 
     private boolean runUpdateLoop(TelemetryPacket packet) {
-        boolean keepRunning = updateRobot(packet);
-        BrainstemPilot.draw(packet.fieldOverlay(), autoId);
-        drawRobot(packet.fieldOverlay());
-        return keepRunning;
+        return updateRobot(packet);
     }
 }

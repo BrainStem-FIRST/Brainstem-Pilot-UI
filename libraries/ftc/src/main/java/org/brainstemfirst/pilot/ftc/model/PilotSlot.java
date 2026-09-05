@@ -22,7 +22,7 @@ public class PilotSlot {
     /** type = point */
     public String pointId;
     public JsonNode params;
-    public List<PilotTrigger> subsystemTriggers;
+    public List<SlotTrigger> subsystemTriggers;
 
     /** type = subsystem, and parallel sub-entries */
     public String subsystemName;
@@ -39,8 +39,29 @@ public class PilotSlot {
         return candidate.equalsIgnoreCase(type);
     }
 
-    /** Wait length in seconds, tolerating either spelling. */
+    public boolean isPositional() {
+        return isType("path") || isType("point");
+    }
+
     public double waitSeconds() {
         return duration > 0 ? duration : defaultWait;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SlotTrigger {
+        public String id;
+        public String subsystemName;
+        public String commandName;
+        public double progress;
+        public double arcLengthM = -1.0;
+
+        public boolean isComplete() {
+            return subsystemName != null && !subsystemName.isEmpty()
+                    && commandName != null && !commandName.isEmpty();
+        }
+
+        public double resolveDistance(double totalLength) {
+            return arcLengthM >= 0 ? arcLengthM : progress * totalLength;
+        }
     }
 }

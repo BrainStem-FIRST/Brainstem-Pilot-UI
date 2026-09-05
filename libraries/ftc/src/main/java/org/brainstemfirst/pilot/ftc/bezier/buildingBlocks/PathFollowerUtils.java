@@ -2,8 +2,6 @@ package org.brainstemfirst.pilot.ftc.bezier.buildingBlocks;
 
 import com.acmerobotics.roadrunner.Vector2d;
 
-import org.brainstemfirst.pilot.ftc.model.PilotGeometry;
-
 import java.util.List;
 
 /**
@@ -18,7 +16,7 @@ public final class PathFollowerUtils {
 
         for (int i = 0; i <= coarseSamples; i++) {
             double t = (double) i / coarseSamples;
-            double dist = PilotGeometry.vecDist(curve.getPoint(t), robotPos);
+            double dist = vecDist(curve.getPoint(t), robotPos);
             if (dist < bestDist) {
                 bestDist = dist;
                 bestT = t;
@@ -36,8 +34,8 @@ public final class PathFollowerUtils {
             double m1 = lo + span / 3.0;
             double m2 = hi - span / 3.0;
 
-            double d1 = PilotGeometry.vecDist(curve.getPoint(m1), robotPos);
-            double d2 = PilotGeometry.vecDist(curve.getPoint(m2), robotPos);
+            double d1 = vecDist(curve.getPoint(m1), robotPos);
+            double d2 = vecDist(curve.getPoint(m2), robotPos);
 
             if (d1 < d2) {
                 hi = m2;
@@ -64,7 +62,7 @@ public final class PathFollowerUtils {
         for (int i = 1; i <= samples; i++) {
             double t = fromT + (1.0 - fromT) * i / samples;
             Vector2d curr = curve.getPoint(t);
-            length += PilotGeometry.vecDist(curr, prev);
+            length += vecDist(curr, prev);
             prev = curr;
         }
 
@@ -104,9 +102,6 @@ public final class PathFollowerUtils {
         Vector2d tangentUnit = tangent.times(1.0 / tangentNorm);
         Vector2d perpUnit = new Vector2d(-tangentUnit.y, tangentUnit.x);
 
-        // The D term is applied only to the tangential component. Folding it into `speed` above
-        // would flip the sign of the perpendicular correction whenever braking dominates, steering
-        // the robot away from the path exactly when it is closest to the end.
         double parallelMag = dot(driveVec, tangentUnit) - speedKD * dot(fieldVelocity, tangentUnit);
         double perpMag = dot(driveVec, perpUnit);
 
@@ -126,8 +121,15 @@ public final class PathFollowerUtils {
      * velocity error, and the resulting command saturates, which is the acceleration limit.
      */
     public static double profileTargetVelocity(double remainingLength, double cruiseVel, double decel) {
-        if (decel <= 0) return cruiseVel;
-        return Math.min(cruiseVel, Math.sqrt(Math.max(0.0, 2.0 * decel * remainingLength)));
+        return profileTargetVelocity(remainingLength, cruiseVel, decel, 0.0);
+    }
+
+    public static double profileTargetVelocity(double remainingLength, double cruiseVel, double decel, double minVel) {
+        double cruise = Math.max(0.0, cruiseVel);
+        double floor = Math.max(0.0, minVel);
+        if (decel <= 0) return Math.max(cruise, floor);
+        double braking = Math.sqrt(Math.max(0.0, 2.0 * decel * remainingLength));
+        return Math.max(floor, Math.min(cruise, braking));
     }
 
     /**
@@ -151,6 +153,24 @@ public final class PathFollowerUtils {
             double velKs,
             double velKp,
             double crossTrackKp) {
+        return calculateProfiledDriveVector(
+                curve, robotPos, closestT, signedRemainingLength, fieldVelocity,
+                cruiseVel, decel, velKv, velKs, velKp, crossTrackKp, 0.0);
+    }
+
+    public static Vector2d calculateProfiledDriveVector(
+            BezierCurve curve,
+            Vector2d robotPos,
+            double closestT,
+            double signedRemainingLength,
+            Vector2d fieldVelocity,
+            double cruiseVel,
+            double decel,
+            double velKv,
+            double velKs,
+            double velKp,
+            double crossTrackKp,
+            double minVel) {
 
         Vector2d tangent = curve.getDerivative(closestT);
         double tangentNorm = tangent.norm();
@@ -160,48 +180,27 @@ public final class PathFollowerUtils {
         Vector2d tangentUnit = tangent.times(1.0 / tangentNorm);
         Vector2d perpUnit = new Vector2d(-tangentUnit.y, tangentUnit.x);
 
-        // Signed, so that a robot which has driven past the endpoint gets a negative target and
-        // reverses back to it. With an unsigned distance the command points down-tangent no matter
-        // which side of the target the robot is on, which is positive feedback: the further past it
-        // goes, the harder it drives away.
         double targetVel = Math.signum(signedRemainingLength)
-                * profileTargetVelocity(Math.abs(signedRemainingLength), cruiseVel, decel);
+                * profileTargetVelocity(Math.abs(signedRemainingLength), cruiseVel, decel, minVel);
         double actualVel = dot(fieldVelocity, tangentUnit);
 
         double tangentialCmd = velKv * targetVel + velKp * (targetVel - actualVel);
-        // Static feedforward follows the sign of the command. Adding it unconditionally would
-        // push the robot forward during the braking phase, when the command is negative.
         if (Math.abs(tangentialCmd) > 1e-3) {
             tangentialCmd += Math.signum(tangentialCmd) * velKs;
         }
-        // Anything past full power is not a stronger command, just a larger number that
-        // setDrivePowers will normalise away — but it does skew the tangential/perpendicular
-        // balance, so clamp before combining.
         tangentialCmd = Math.max(-1.0, Math.min(1.0, tangentialCmd));
 
-        // Signed perpendicular offset of the robot from the path, pushed back toward the curve.
         double crossTrackError = dot(robotPos.minus(curve.getPoint(closestT)), perpUnit);
         double perpCmd = -crossTrackKp * crossTrackError;
 
         return tangentUnit.times(tangentialCmd).plus(perpUnit.times(perpCmd));
     }
 
-    /** Commanded open-loop speed before the D term — useful for tuning telemetry. */
-    public static double commandedSpeed(double remainingLength, double speedKP, double speedKF) {
-        return remainingLength * speedKP + speedKF;
-    }
-
-    /** Signed projection of {@code vec} onto the path tangent at {@code t}. */
     public static double projectOnTangent(BezierCurve curve, double t, Vector2d vec) {
         Vector2d tangent = curve.getDerivative(t);
         double norm = tangent.norm();
         if (norm < 1e-6) return 0.0;
         return dot(vec, tangent.times(1.0 / norm));
-    }
-
-    /** Signed velocity along the path tangent at {@code t}. Positive means moving toward the end. */
-    public static double tangentialVelocity(BezierCurve curve, double t, Vector2d fieldVelocity) {
-        return projectOnTangent(curve, t, fieldVelocity);
     }
 
     public static double getTargetRotation(List<RotationPoint> rotationPoints, double t, double entryHeadingRad) {
@@ -221,7 +220,7 @@ public final class PathFollowerUtils {
             }
 
             double localPct = t / targetPoint.getT();
-            return PilotGeometry.lerpHeading(entryHeadingRad, targetPoint.getHeadingRad(), localPct);
+            return lerpHeading(entryHeadingRad, targetPoint.getHeadingRad(), localPct);
         }
 
         if (t <= rotationPoints.get(0).getT()) {
@@ -229,7 +228,7 @@ public final class PathFollowerUtils {
             if (first.getT() < 1e-6) {
                 return first.getHeadingRad();
             }
-            return PilotGeometry.lerpHeading(entryHeadingRad, first.getHeadingRad(), t / first.getT());
+            return lerpHeading(entryHeadingRad, first.getHeadingRad(), t / first.getT());
         }
 
         if (t >= rotationPoints.get(rotationPoints.size() - 1).getT()) {
@@ -248,7 +247,7 @@ public final class PathFollowerUtils {
                 }
 
                 double localPct = (t - p1.getT()) / segmentSpan;
-                return PilotGeometry.lerpHeading(p1.getHeadingRad(), p2.getHeadingRad(), localPct);
+                return lerpHeading(p1.getHeadingRad(), p2.getHeadingRad(), localPct);
             }
         }
 
@@ -256,7 +255,7 @@ public final class PathFollowerUtils {
     }
 
     public static double getRotationPower(double currentHeadingRad, double targetHeadingRad, double kP, double kF) {
-        double errorRadians = PilotGeometry.angleNormDeltaRad(targetHeadingRad - currentHeadingRad);
+        double errorRadians = angleNormDeltaRad(targetHeadingRad - currentHeadingRad);
         double power = errorRadians * kP;
         if (Math.abs(power) > 1e-6) {
             return power + (Math.signum(power) * kF);
@@ -264,99 +263,54 @@ public final class PathFollowerUtils {
         return power;
     }
 
-    public static boolean isPathFinished(double closestT, Vector2d robotPos, BezierCurve curve, double distanceThreshold) {
-        return closestT >= 0.99 && PilotGeometry.vecDist(robotPos, curve.getEnd()) < distanceThreshold;
+    public static double vecDist(Vector2d a, Vector2d b) {
+        return b.minus(a).norm();
     }
 
-    public static Vector2d getCentripetalCompensation(BezierCurve curve, double t, double robotSpeed, double centripetalGain, double epsilon) {
-        double tA = Math.max(0.0, t - epsilon);
-        double tC = Math.min(1.0, t + epsilon);
-
-        Vector2d A = curve.getPoint(tA);
-        Vector2d B = curve.getPoint(t);
-        Vector2d C = curve.getPoint(tC);
-
-        double ab = PilotGeometry.vecDist(A, B);
-        double bc = PilotGeometry.vecDist(B, C);
-        double ca = PilotGeometry.vecDist(C, A);
-
-        double cross = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
-        double twoArea = Math.abs(cross);
-
-        if (twoArea < 1e-3) return new Vector2d(0, 0);
-
-        double radius = (ab * bc * ca) / (2.0 * twoArea);
-        double centripetalAccel = (robotSpeed * robotSpeed) / radius;
-
-        double ax = A.x, ay = A.y;
-        double bx = B.x, by = B.y;
-        double cx = C.x, cy = C.y;
-
-        double D = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-        double ux = ((ax * ax + ay * ay) * (by - cy)
-                + (bx * bx + by * by) * (cy - ay)
-                + (cx * cx + cy * cy) * (ay - by)) / D;
-        double uy = ((ax * ax + ay * ay) * (cx - bx)
-                + (bx * bx + by * by) * (ax - cx)
-                + (cx * cx + cy * cy) * (bx - ax)) / D;
-
-        Vector2d toCenter = new Vector2d(ux - bx, uy - by);
-        double toCenterNorm = toCenter.norm();
-
-        if (toCenterNorm < 1e-9) return new Vector2d(0, 0);
-
-        Vector2d inwardUnit = toCenter.times(1.0 / toCenterNorm);
-        return inwardUnit.times(centripetalAccel * centripetalGain);
+    public static double angleNormRad(double rad) {
+        if (rad >= 0 && rad < Math.PI * 2) {
+            return rad;
+        }
+        return (rad % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     }
 
-    public record CentripetalInfo(Vector2d circleCenter, double circleRadius, Vector2d compensation) {}
-
-    public static CentripetalInfo getCentripetalCompensationDebug(
-            BezierCurve curve, double t, double robotSpeed, double centripetalGain, double epsilon, double dtSeconds) {
-        double tA = Math.max(0.0, t - epsilon);
-        double tC = Math.min(1.0, t + epsilon);
-
-        Vector2d A = curve.getPoint(tA);
-        Vector2d B = curve.getPoint(t);
-        Vector2d C = curve.getPoint(tC);
-
-        double ab = PilotGeometry.vecDist(A, B);
-        double bc = PilotGeometry.vecDist(B, C);
-        double ca = PilotGeometry.vecDist(C, A);
-
-        double cross = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
-        double twoArea = Math.abs(cross);
-
-        if (twoArea < 1e-3) {
-            return new CentripetalInfo(null, 0, new Vector2d(0, 0));
+    public static double angleNormDeltaRad(double rad) {
+        rad = angleNormRad(rad);
+        if (rad > Math.PI) {
+            rad -= 2 * Math.PI;
         }
+        return rad;
+    }
 
-        double radius = (ab * bc * ca) / (2.0 * twoArea);
-        double centripetalAccel = (robotSpeed * robotSpeed) / radius;
-        double deltaVelocity = centripetalAccel * dtSeconds;
+    public static double absHeadingError(double targetRad, double currentRad) {
+        return Math.abs(angleNormDeltaRad(targetRad - currentRad));
+    }
 
-        double ax = A.x, ay = A.y;
-        double bx = B.x, by = B.y;
-        double cx = C.x, cy = C.y;
+    public static double lerpHeading(double startRad, double endRad, double t) {
+        double delta = angleNormDeltaRad(endRad - startRad);
+        return angleNormRad(startRad + delta * t);
+    }
 
-        double D = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-        double ux = ((ax * ax + ay * ay) * (by - cy)
-                + (bx * bx + by * by) * (cy - ay)
-                + (cx * cx + cy * cy) * (ay - by)) / D;
-        double uy = ((ax * ax + ay * ay) * (cx - bx)
-                + (bx * bx + by * by) * (ax - cx)
-                + (cx * cx + cy * cy) * (bx - ax)) / D;
+    public static double flipHeadingForRed(double headingRad) {
+        return angleNormRad(headingRad + Math.PI);
+    }
 
-        Vector2d toCenter = new Vector2d(ux - bx, uy - by);
-        double toCenterNorm = toCenter.norm();
+    public static Vector2d rotate(Vector2d vector, double angleRad) {
+        double cos = Math.cos(angleRad);
+        double sin = Math.sin(angleRad);
+        return new Vector2d(
+                vector.x * cos - vector.y * sin,
+                vector.x * sin + vector.y * cos
+        );
+    }
 
-        if (toCenterNorm < 1e-9) {
-            return new CentripetalInfo(null, 0, new Vector2d(0, 0));
-        }
-
-        Vector2d inwardUnit = toCenter.times(1.0 / toCenterNorm);
-        Vector2d compensation = inwardUnit.times(deltaVelocity * centripetalGain);
-        return new CentripetalInfo(B.plus(toCenter), radius, compensation);
+    public static Vector2d fieldToRobot(Vector2d fieldVelocity, double robotHeadingRad) {
+        double cos = Math.cos(robotHeadingRad);
+        double sin = Math.sin(robotHeadingRad);
+        return new Vector2d(
+                fieldVelocity.x * cos + fieldVelocity.y * sin,
+                -fieldVelocity.x * sin + fieldVelocity.y * cos
+        );
     }
 
     private static double dot(Vector2d a, Vector2d b) {
