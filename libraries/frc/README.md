@@ -3,6 +3,8 @@
 Vendordep: `BrainstemPilot.json`  
 Maven coordinate: `org.brainstemfirst:pilot-frc:2026.1.0`
 
+Team docs: [Install FRC](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/install/frc) · [Java API](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/frc/)
+
 This module is the robot-side Bézier follower and auto JSON reader. The visual editor stays in the app; this library runs on the RoboRIO.
 
 ## Add it to an FRC project

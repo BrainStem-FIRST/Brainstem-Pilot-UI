@@ -2,6 +2,7 @@ package org.brainstemfirst.pilot.ftc.bezier.tolerance;
 
 import com.acmerobotics.roadrunner.Vector2d;
 
+/** Position and heading completion checks used by the Bézier follower. */
 public interface Tolerance {
     boolean inPositionTolerance(Vector2d positionError);
     boolean inHeadingTolerance(double headingErrorRad);

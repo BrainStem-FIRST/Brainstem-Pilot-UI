@@ -50,6 +50,22 @@ dependencies {
 }
 
 afterEvaluate {
+    def release = android.libraryVariants.find { it.name == 'release' }
+    tasks.register('javadoc', Javadoc) {
+        group = 'documentation'
+        description = 'Generate FTC library Javadoc.'
+        dependsOn release.javaCompileProvider
+        source = android.sourceSets.main.java.srcDirs
+        classpath += files(release.javaCompileProvider.get().classpath)
+        classpath += files(android.bootClasspath)
+        destinationDir = layout.buildDirectory.dir('docs/javadoc').get().asFile
+        failOnError = false
+        options.encoding = 'UTF-8'
+        options.addStringOption('Xdoclint:none', '-quiet')
+        options.windowTitle = "BrainSTEM Pilot FTC ${project.version} API"
+        options.docTitle = "BrainSTEM Pilot FTC ${project.version} API"
+    }
+
     publishing {
         publications {
             release(MavenPublication) {

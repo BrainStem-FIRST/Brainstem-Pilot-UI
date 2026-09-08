@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen } from 'lucide-react';
+import { BookOpen, FolderOpen } from 'lucide-react';
 import { hasProjectDir } from '../lib/projectFolder';
+import { DOCS_SITE_URL } from '../lib/docsSite';
 import { pickAndBindProject } from '../lib/openProject';
 import { projectFolderPath } from '../lib/projectLocation';
 import { useLeague } from '../context/LeagueContext';
@@ -130,6 +131,15 @@ export default function Welcome() {
           <p className="mt-3 text-[13px] text-muted-foreground text-center truncate font-num">
             {projectFolderPath(projectType)}
           </p>
+          <a
+            href={DOCS_SITE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-6 flex items-center justify-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            Documentation
+          </a>
         </div>
       </div>
     </div>

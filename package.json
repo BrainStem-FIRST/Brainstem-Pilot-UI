@@ -16,7 +16,9 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
-    "docs:shots": "node scripts/capture-docs.mjs"
+    "docs:shots": "node scripts/capture-docs.mjs",
+    "docs:dev": "node scripts/sync-docs-assets.mjs && vitepress dev docs",
+    "docs:build": "node scripts/sync-docs-assets.mjs && vitepress build docs && node scripts/copy-javadoc.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
@@ -107,6 +109,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
     "vite": "^6.1.0",
+    "vitepress": "^1.6.4",
     "wait-on": "^8.0.1"
   },
   "allowScripts": {

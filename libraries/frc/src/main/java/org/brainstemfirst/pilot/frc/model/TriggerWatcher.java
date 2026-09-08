@@ -9,6 +9,7 @@ import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.BezierCurve;
 
 import java.util.function.Supplier;
 
+/** Fires path subsystem triggers when the robot has travelled far enough along the curve. */
 public class TriggerWatcher extends Command {
 
     private static final int ARC_LENGTH_SAMPLES = 40;

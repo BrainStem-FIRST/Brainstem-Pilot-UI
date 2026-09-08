@@ -10,6 +10,15 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
     withSourcesJar()
+    withJavadocJar()
+}
+
+javadoc {
+    failOnError = false
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.windowTitle = "BrainSTEM Pilot FRC ${project.version} API"
+    options.docTitle = "BrainSTEM Pilot FRC ${project.version} API"
 }
 
 repositories {

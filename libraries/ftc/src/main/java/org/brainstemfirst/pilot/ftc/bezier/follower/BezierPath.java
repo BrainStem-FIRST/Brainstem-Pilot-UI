@@ -9,6 +9,7 @@ import org.brainstemfirst.pilot.ftc.bezier.buildingBlocks.RotationPoint;
 import java.util.ArrayList;
 import java.util.List;
 
+/** One cubic Bézier segment plus rotation targets and mid-path subsystem triggers. */
 public class BezierPath {
     public final BezierCurve curve;
     public final BezierParams params;

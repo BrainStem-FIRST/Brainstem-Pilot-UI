@@ -7,6 +7,7 @@ import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.BezierCurve;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.BezierParams;
 import org.brainstemfirst.pilot.frc.bezier.buildingBlocks.RotationPoint;
 
+/** One cubic Bézier segment plus rotation targets and mid-path subsystem triggers. */
 public class BezierPath {
     public final BezierCurve curve;
     public final BezierParams params;

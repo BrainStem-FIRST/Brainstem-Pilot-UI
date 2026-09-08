@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 
+/** Position and heading completion checks used by the Bézier follower. */
 public interface Tolerance {
     boolean inPositionTolerance(Translation2d positionError);
     boolean inHeadingTolerance(Rotation2d headingError);

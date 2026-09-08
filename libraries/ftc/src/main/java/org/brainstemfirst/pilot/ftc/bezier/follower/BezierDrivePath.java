@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
+/** Road Runner action that tracks a {@link BezierPath}. */
 public class BezierDrivePath implements Action {
 
     private static final int CLOSEST_T_COARSE_SAMPLES = 40;

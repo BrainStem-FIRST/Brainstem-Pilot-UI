@@ -2,6 +2,8 @@
 
 Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.0`
 
+Team docs: [Install FTC](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/install/ftc) · [Java API](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/ftc/)
+
 This module is the robot-side Bézier follower and auto JSON reader. The visual editor stays in the app; this library runs on the Control Hub.
 
 ## Add it to an FTC project

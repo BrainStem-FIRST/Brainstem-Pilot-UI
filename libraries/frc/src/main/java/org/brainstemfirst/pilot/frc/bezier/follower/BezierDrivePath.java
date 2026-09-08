@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
+/** WPILib command that tracks a {@link org.brainstemfirst.pilot.frc.bezier.follower.BezierPath}. */
 public class BezierDrivePath extends Command {
 
     private static final int CLOSEST_T_COARSE_SAMPLES = 40;

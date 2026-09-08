@@ -99,6 +99,9 @@ public class BrainstemPilot {
         initialize(drive, pose, fieldRelativeSpeeds, runVelocity, maxAngularSpeedRadPerSec, new BezierParams());
     }
 
+    /**
+     * Bind drive callbacks and default Bézier parameters used when a path JSON omits a value.
+     */
     public static void initialize(
             Subsystem drive,
             Supplier<Pose2d> pose,

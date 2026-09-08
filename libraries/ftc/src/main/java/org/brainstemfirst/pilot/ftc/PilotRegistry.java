@@ -19,6 +19,13 @@ public final class PilotRegistry {
 
     private PilotRegistry() {}
 
+    /**
+     * Bind a UI subsystem/command pair to a Road Runner action supplier.
+     *
+     * @param subsystemName name as entered in Configure Subsystems
+     * @param commandName command name as entered in the UI
+     * @param commandSupplier creates a fresh action each time the auto runs the trigger
+     */
     public static void addCommand(String subsystemName, String commandName, Supplier<Action> commandSupplier) {
         registry.put(key(subsystemName, commandName), commandSupplier);
     }

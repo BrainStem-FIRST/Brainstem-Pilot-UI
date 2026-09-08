@@ -73,6 +73,11 @@ function buildMenu() {
       role: 'help',
       submenu: [
         {
+          label: 'Documentation',
+          click: () =>
+            shell.openExternal('https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/'),
+        },
+        {
           label: 'BrainSTEM Pilot on the Web',
           click: () => shell.openExternal('https://brainstem-first.github.io/Brainstem-Pilot-UI/'),
         },

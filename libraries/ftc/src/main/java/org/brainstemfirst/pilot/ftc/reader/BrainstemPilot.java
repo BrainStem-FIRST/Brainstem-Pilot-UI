@@ -42,6 +42,12 @@ import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
+/**
+ * Reads Brainstem Pilot autos from APK assets and builds them into Road Runner actions.
+ *
+ * <p>{@link org.brainstemfirst.pilot.ftc.PilotOpMode} calls {@link #initialize} and
+ * {@link #buildAuto}; teams should not copy this class into TeamCode.
+ */
 public class BrainstemPilot {
 
     private static final String TAG = "BrainstemPilot";

@@ -18,6 +18,14 @@ import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
+/**
+ * Base OpMode for BrainSTEM Pilot autos. Generated OpModes extend team {@code PilotAutoBase},
+ * which extends this class.
+ *
+ * <p>Implement {@link #setupRobot}, drive callbacks, {@link #registerCommands}, and
+ * {@link #updateRobot}. {@link org.brainstemfirst.pilot.ftc.reader.BrainstemPilot} loads the
+ * matching {@code autos/<id>.auto.json} from APK assets.
+ */
 public abstract class PilotOpMode extends LinearOpMode {
     public static FieldConstants.Alliance defaultAlliance = FieldConstants.Alliance.BLUE;
     public static double maxLinearSpeed = 60;
@@ -32,20 +40,31 @@ public abstract class PilotOpMode extends LinearOpMode {
         this.autoId = autoId;
     }
 
+    /** Construct your robot and seed odometry at {@code startPose}. */
     protected abstract void setupRobot(FieldConstants.Alliance alliance, Pose2d startPose);
 
+    /** Current estimated field pose. */
     protected abstract Supplier<Pose2d> pose();
 
+    /** Last robot-relative velocity from the drivetrain. */
     protected abstract Supplier<PoseVelocity2d> lastVelRobot();
 
+    /** Apply a robot-relative velocity command. */
     protected abstract Consumer<PoseVelocity2d> setDrivePowers();
 
+    /** Maximum angular speed (rad/s) used by the follower. */
     protected abstract DoubleSupplier maxAngVel();
 
+    /** Register every UI subsystem/command name with {@link PilotRegistry#addCommand}. */
     protected abstract void registerCommands();
 
+    /** Called once after START, before the auto action runs. */
     protected void onOpModeStart() {}
 
+    /**
+     * Subsystem loop while the auto is running. Return {@code true} to keep the parallel update
+     * action alive (typically after {@code updatePoseEstimate()}).
+     */
     protected abstract boolean updateRobot(TelemetryPacket packet);
 
     protected BezierParams createDefaultBezierParams() {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Route, Layers, Cpu, Settings2, ArrowRight, FolderCheck, ChevronDown } from 'lucide-react';
+import { Route, Layers, Cpu, Settings2, ArrowRight, FolderCheck, ChevronDown, BookOpen } from 'lucide-react';
+import { DOCS_SITE_URL } from '../lib/docsSite';
 import { getProjectDir, hasProjectDir } from '../lib/projectFolder';
 import { pickAndBindProject } from '../lib/openProject';
 import { projectFolderPath } from '../lib/projectLocation';
@@ -114,6 +115,16 @@ export default function Home() {
         <span className="px-2 py-1 rounded border border-border text-[11px] font-semibold text-muted-foreground">
           {projectType.toUpperCase()}
         </span>
+        <a
+          href={DOCS_SITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open documentation in your browser"
+          className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          Documentation
+        </a>
         <Link
           to="/settings"
           className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"

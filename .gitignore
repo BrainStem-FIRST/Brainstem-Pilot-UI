@@ -39,3 +39,8 @@ libraries/ftc/local.properties
 public/frc-maven/
 public/maven/
 
+# VitePress copies screenshots here before build; do not commit
+docs/public/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+

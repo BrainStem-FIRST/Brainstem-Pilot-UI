@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { readEntity, createEntity, updateEntity, deleteEntity, safeNameFromString } from '../lib/dataService';
-import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, MonitorPlay, Copy, Library } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Layers, Pencil, Check, X, Copy, Library } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { buildAutoChain, generateTrajectory } from '../lib/trajectoryMath';
 import { normalizeSavedPath } from '../lib/pathWaypoints';
@@ -316,9 +316,6 @@ export default function StringBuilderList() {
                       </div>
                       <button onClick={e => duplicateAuto(e, auto)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all opacity-0 group-hover:opacity-100" title="Duplicate">
                         <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); navigate(`/auto-simulator/${aId}`); }} className="p-1.5 rounded-md text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-all opacity-0 group-hover:opacity-100" title="Simulate">
-                        <MonitorPlay className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={e => { e.stopPropagation(); setRenamingId(aId); }} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all opacity-0 group-hover:opacity-100">
                         <Pencil className="w-3.5 h-3.5" />

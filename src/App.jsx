@@ -11,7 +11,6 @@ import Settings from './pages/Settings';
 import StringBuilderList from './pages/StringBuilderList';
 import AutoWorkspace from './pages/AutoWorkspace';
 import SubsystemConfigPage from './pages/SubsystemConfigPage';
-import AutoSimulator from './pages/AutoSimulator';
 import LibraryIndex from './pages/LibraryIndex';
 import { FieldConfigProvider } from './context/FieldConfigContext';
 import { LeagueProvider } from './context/LeagueContext';
@@ -47,8 +46,6 @@ function AppRoutes() {
           <Route path="/string-builder" element={<RequireProject><StringBuilderList /></RequireProject>} />
           <Route path="/auto-workspace/:id" element={<RequireProject><AutoWorkspace /></RequireProject>} />
           <Route path="/subsystem-config" element={<RequireProject><SubsystemConfigPage /></RequireProject>} />
-          <Route path="/auto-simulator" element={<RequireProject><AutoSimulator /></RequireProject>} />
-          <Route path="/auto-simulator/:id" element={<RequireProject><AutoSimulator /></RequireProject>} />
           <Route path="/library" element={<RequireProject><LibraryIndex /></RequireProject>} />
           <Route path="*" element={<PageNotFound />} />
         </Routes>

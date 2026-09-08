@@ -2,6 +2,7 @@ package org.brainstemfirst.pilot.ftc.bezier.tolerance;
 
 import com.acmerobotics.roadrunner.Vector2d;
 
+/** Circular position band plus a heading band; the default {@link Tolerance} on FTC paths. */
 public class CircleTolerance implements Tolerance {
     public static class DefaultParams {
         public double distTol = 3.0;

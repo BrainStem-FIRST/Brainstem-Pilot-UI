@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/** Reads {@code paths/*.path.json} into follower-ready {@link BezierPath} segments. */
 public class PathParser {
     private static final ObjectMapper m_objectMapper = new ObjectMapper();
 

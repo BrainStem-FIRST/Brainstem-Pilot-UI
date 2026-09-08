@@ -7,7 +7,9 @@
 <p align="center">
   <a href="https://brainstem-first.github.io/Brainstem-Pilot-UI/"><b>Live app</b></a>
   ·
-  <a href="https://github.com/BrainStem-FIRST/Brainstem-Pilot-UI/releases/latest"><b>Download for desktop</b></a>
+  <a href="https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/"><b>Docs</b></a>
+  ·
+    <a href="https://github.com/BrainStem-FIRST/Brainstem-Pilot-UI/releases/latest"><b>Download for desktop</b></a>
   ·
   <a href="#why-brainstem-pilot"><b>Why BrainSTEM Pilot</b></a>
 </p>
@@ -89,8 +91,12 @@ The desktop builds are **not code-signed**, so the OS warns on first launch:
 
 Robot code that follows those JSON files lives in [`libraries/ftc`](libraries/ftc) (`org.brainstemfirst:pilot-ftc`). Teams add the published artifact with Gradle; do not `includeBuild` the library into a robot project.
 
-Opening an FTC project (or saving an Auto) creates `PilotAutoBase.java` in the project folder if it is missing. Generated OpModes extend that class. Edit it to construct your robot, bind drive pose/velocity callbacks, and call `PilotRegistry.addCommand(...)` — the UI will not overwrite it. See [`libraries/ftc/README.md`](libraries/ftc/README.md).
+Opening an FTC project (or saving an Auto) creates `PilotAutoBase.java` in the project folder if it is missing. Generated OpModes extend that class. Edit it to construct your robot, bind drive pose/velocity callbacks, and call `PilotRegistry.addCommand(...)` — the UI will not overwrite it. See the [FTC install docs](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/install/ftc).
 
-The in-app **Documentation** page (linked top-left) covers the path editor, waypoints/Bezier curves, optional per-waypoint parameters, rotation targets, subsystem triggers, and the auto workspace in more detail, with screenshots.
+### FRC robot library
+
+Install the vendordep from the [FRC install docs](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/install/frc) (`org.brainstemfirst:pilot-frc`). Do not copy follower or parser classes into robot code.
+
+**[Documentation](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/)** — install the app and robot libraries, a full editor guide, and generated Java API for every public class in `pilot-frc` and `pilot-ftc`. Use the search box on that site, or search the web for “BrainSTEM Pilot” plus the topic (the Pages site is public and indexable).
 
 > Projects made with an older version stored autos as a *skeleton* plus *variants*. Opening one migrates it into `autos/` automatically and files the originals under `legacy/`; nothing reads them afterwards.
