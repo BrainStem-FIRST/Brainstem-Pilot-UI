@@ -4,8 +4,8 @@ Every public class in the robot libraries is published as generated Javadoc when
 
 | Library | Artifact | Class reference |
 | --- | --- | --- |
-| FRC | `org.brainstemfirst:pilot-frc` | [FRC Javadoc](/javadoc/frc/) |
-| FTC | `org.brainstemfirst:pilot-ftc` | [FTC Javadoc](/javadoc/ftc/) |
+| FRC | `org.brainstemfirst:pilot-frc` | [FRC Javadoc](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/frc/index.html) |
+| FTC | `org.brainstemfirst:pilot-ftc` | [FTC Javadoc](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/ftc/index.html) |
 
 Javadoc is generated from comments in source. Start with the types teams actually call; follower internals are listed too.
 

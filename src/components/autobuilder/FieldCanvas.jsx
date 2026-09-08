@@ -6,7 +6,7 @@ import {
 import { getPoseAtProgress } from '../../lib/trajectoryMath';
 import { useFieldConfig } from '../../context/FieldConfigContext';
 import { useLeague } from '../../context/LeagueContext';
-import { getMotionUnitsForLeague } from '../../lib/motionUnits';
+import { lockControlHandles180 } from '../../lib/pathWaypoints';
 
 function drawStar(ctx, cx, cy, r, color) {
   const spikes = 5;
@@ -30,19 +30,6 @@ function drawStar(ctx, cx, cy, r, color) {
 
 const CTRL_RADIUS = 7;
 
-function lockControls180(wp, controlType, newControlPos) {
-  const dx = newControlPos.x - wp.x;
-  const dy = newControlPos.y - wp.y;
-  const oppositeType = controlType === 'prevControl' ? 'nextControl' : 'prevControl';
-  const updates = { [controlType]: newControlPos };
-  const oppDist = wp[oppositeType]
-    ? Math.hypot(wp[oppositeType].x - wp.x, wp[oppositeType].y - wp.y)
-    : Math.hypot(dx, dy);
-  const thisDist = Math.hypot(dx, dy);
-  const scale = thisDist > 0 ? oppDist / thisDist : 1;
-  updates[oppositeType] = { x: wp.x - dx * scale, y: wp.y - dy * scale };
-  return updates;
-}
 const MIDPOINT_RADIUS = 7;
 
 export default function FieldCanvas({
@@ -110,10 +97,16 @@ export default function FieldCanvas({
     const wp = waypoints[i];
     const prev = waypoints[i - 1];
     const next = waypoints[i + 1];
-    
-    const prevCtrl = i === 0 ? null : (wp.prevControl ?? (prev ? { x: wp.x + (prev.x - wp.x) / 3, y: wp.y + (prev.y - wp.y) / 3 } : null));
-    const nextCtrl = i === waypoints.length - 1 ? null : (wp.nextControl ?? (next ? { x: wp.x + (next.x - wp.x) / 3, y: wp.y + (next.y - wp.y) / 3 } : null));
-    
+
+    let prevCtrl = i === 0 ? null : (wp.prevControl ?? (prev ? { x: wp.x + (prev.x - wp.x) / 3, y: wp.y + (prev.y - wp.y) / 3 } : null));
+    let nextCtrl = i === waypoints.length - 1 ? null : (wp.nextControl ?? (next ? { x: wp.x + (next.x - wp.x) / 3, y: wp.y + (next.y - wp.y) / 3 } : null));
+
+    if (prevCtrl && nextCtrl) {
+      const aligned = lockControlHandles180(wp, 'nextControl', nextCtrl);
+      prevCtrl = aligned.prevControl;
+      nextCtrl = aligned.nextControl;
+    }
+
     return { prevCtrl, nextCtrl };
   }, [waypoints]);
 
@@ -378,14 +371,6 @@ export default function FieldCanvas({
       if (!ctrl) return;
       const { px: cx, py: cy } = toPixel(ctrl.x, ctrl.y);
       ctx.beginPath();
-      ctx.setLineDash(isSelected ? [] : [5, 4]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = 2 * s;
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
       ctx.arc(cx, cy, CTRL_RADIUS * s, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
@@ -393,6 +378,30 @@ export default function FieldCanvas({
       ctx.lineWidth = 1.5 * s;
       ctx.stroke();
     };
+
+    ctx.beginPath();
+    ctx.setLineDash(isSelected ? [] : [5, 4]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2 * s;
+    if (prevCtrl && nextCtrl) {
+      const { px: p1, py: q1 } = toPixel(prevCtrl.x, prevCtrl.y);
+      const { px: p2, py: q2 } = toPixel(nextCtrl.x, nextCtrl.y);
+      ctx.moveTo(p1, q1);
+      ctx.lineTo(p2, q2);
+    } else {
+      if (prevCtrl) {
+        const { px: cx, py: cy } = toPixel(prevCtrl.x, prevCtrl.y);
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(cx, cy);
+      }
+      if (nextCtrl) {
+        const { px: cx, py: cy } = toPixel(nextCtrl.x, nextCtrl.y);
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(cx, cy);
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
 
     if (!isFirst) drawHandle(prevCtrl);
     if (!isLast) drawHandle(nextCtrl);
@@ -654,7 +663,7 @@ export default function FieldCanvas({
         const isPrevFirst = prevIdx === 0;
         const prevUpdates = isPrevFirst
           ? { nextControl }
-          : lockControls180(prev, 'nextControl', nextControl);
+          : lockControlHandles180(prev, 'nextControl', nextControl);
         onUpdateWaypoint(prevIdx, prevUpdates);
       }
       
@@ -730,23 +739,11 @@ export default function FieldCanvas({
       if (dragging.controlType === 'prevControl' && isFirst) return;
       if (dragging.controlType === 'nextControl' && isLast) return;
 
-      const updates = { [dragging.controlType]: { x: clamped.x, y: clamped.y } };
-      const oppositeType = dragging.controlType === 'prevControl' ? 'nextControl' : 'prevControl';
-      const isOppositeBoundary = (oppositeType === 'prevControl' && isFirst) || 
-                                 (oppositeType === 'nextControl' && isLast);
-
-      const oppositeExists = wp[oppositeType] != null && !isOppositeBoundary;
-      if (oppositeExists) {
-        const dx = clamped.x - wp.x;
-        const dy = clamped.y - wp.y;
-        const oppDist = Math.hypot(wp[oppositeType].x - wp.x, wp[oppositeType].y - wp.y);
-        const thisDist = Math.hypot(dx, dy);
-        const scale = thisDist > 0 ? oppDist / thisDist : 1;
-        updates[oppositeType] = {
-          x: wp.x - dx * scale,
-          y: wp.y - dy * scale,
-        };
-      }
+      const updates = (isFirst || isLast)
+        ? { [dragging.controlType]: { x: clamped.x, y: clamped.y } }
+        : lockControlHandles180(wp, dragging.controlType, { x: clamped.x, y: clamped.y });
+      if (isFirst) updates.prevControl = null;
+      if (isLast) updates.nextControl = null;
       onUpdateWaypoint(dragging.index, updates);
     }
   }, [dragging, toMeter, toPixel, onUpdateWaypoint, onUpdateRotationTargets, waypoints, rotationTargets, trajectory]);

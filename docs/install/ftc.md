@@ -71,4 +71,4 @@ See [FTC in the guide](/guide/ftc).
 
 ## API
 
-Generated class docs: [FTC Javadoc](/javadoc/ftc/).
+Generated class docs: [FTC Javadoc](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/ftc/index.html).

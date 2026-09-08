@@ -125,6 +125,58 @@ export function parseWaypointFromClipboard(text) {
   }
 }
 
+/** Keep Bézier handles collinear (180°) through the waypoint, preserving opposite length. */
+export function lockControlHandles180(wp, controlType, newControlPos) {
+  const dx = newControlPos.x - wp.x;
+  const dy = newControlPos.y - wp.y;
+  const oppositeType = controlType === 'prevControl' ? 'nextControl' : 'prevControl';
+  const updates = { [controlType]: newControlPos };
+  const oppDist = wp[oppositeType]
+    ? Math.hypot(wp[oppositeType].x - wp.x, wp[oppositeType].y - wp.y)
+    : Math.hypot(dx, dy);
+  const thisDist = Math.hypot(dx, dy);
+  const scale = thisDist > 0 ? oppDist / thisDist : 1;
+  updates[oppositeType] = { x: wp.x - dx * scale, y: wp.y - dy * scale };
+  return updates;
+}
+
+function alignMidpointHandles(wp, index, total) {
+  if (index === 0) return { ...wp, prevControl: null };
+  if (index === total - 1) return { ...wp, nextControl: null };
+  if (wp.nextControl) return { ...wp, ...lockControlHandles180(wp, 'nextControl', wp.nextControl) };
+  if (wp.prevControl) return { ...wp, ...lockControlHandles180(wp, 'prevControl', wp.prevControl) };
+  return wp;
+}
+
+/** Insert a new waypoint on the segment after `index` (or past the end if `index` is last). */
+export function insertWaypointAfter(waypoints, index) {
+  if (!Array.isArray(waypoints) || index == null || index < 0 || index >= waypoints.length) {
+    return waypoints;
+  }
+  const a = waypoints[index];
+  const b = waypoints[index + 1];
+  let x;
+  let y;
+  if (b) {
+    x = (a.x + b.x) / 2;
+    y = (a.y + b.y) / 2;
+  } else {
+    const prev = waypoints[index - 1];
+    const dx = prev ? a.x - prev.x : 0.5;
+    const dy = prev ? a.y - prev.y : 0;
+    const len = Math.hypot(dx, dy);
+    const step = len > 1e-6 ? len : 0.5;
+    x = a.x + (len > 1e-6 ? dx / len : 1) * step;
+    y = a.y + (len > 1e-6 ? dy / len : 0) * step;
+  }
+  const next = insertPastedWaypoint(waypoints, {
+    x,
+    y,
+    rotation: a.rotation ?? 0,
+  }, index + 1);
+  return next.map((wp, i) => alignMidpointHandles(wp, i, next.length));
+}
+
 /** Insert a pasted waypoint into an existing waypoint list. */
 export function insertPastedWaypoint(waypoints, wp, insertIndex) {
   const total = waypoints.length + 1;

@@ -13,7 +13,7 @@ import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
 import { getDefaultPathEditorView } from '../lib/fieldCoordinates';
 import { getMotionUnitsForLeague } from '../lib/motionUnits';
-import { normalizeSavedPath } from '../lib/pathWaypoints';
+import { normalizeSavedPath, insertWaypointAfter } from '../lib/pathWaypoints';
 import { readEntity, updateEntity, createEntity, safeNameFromString } from '../lib/dataService';
 import { savePathToProject, savePointToProject, saveAutoToProject } from '../lib/projectFolder';
 import { seedWaypointsForNewPath } from '../lib/autoSequence';
@@ -1163,6 +1163,14 @@ export default function AutoWorkspace() {
     setSelectedWaypointIndex(idx => idx != null && idx >= next.length ? next.length - 1 : idx);
   }, [activePathRecord, nativeWaypoints, updatePathRecord, startLinked]);
 
+  const onInsertPathWaypointAfter = useCallback((index) => {
+    if (!activePathRecord) return;
+    const next = insertWaypointAfter(nativeWaypoints, index);
+    if (next === nativeWaypoints) return;
+    updatePathRecord(activePathRecord.id, { waypoints: next });
+    setSelectedWaypointIndex(index + 1);
+  }, [activePathRecord, nativeWaypoints, updatePathRecord]);
+
   // ── Active point-slot editing ─────────────────────────────────────────────
 
   const activePoint = useMemo(() => {
@@ -1627,8 +1635,11 @@ export default function AutoWorkspace() {
           </div>
         </div>
 
-        {/* Right: waypoint / params panel — always visible */}
-        <div className="w-72 shrink-0 bg-card border-l border-border overflow-y-auto shrink-0 flex flex-col">
+        {/* Right: waypoint / params panel. Path editor owns its width (drag the left
+            edge to grow into the field). Other slot types stay at the 288px rail. */}
+        <div className={`shrink-0 bg-card border-l border-border min-h-0 overflow-hidden flex flex-col ${
+          !showSimCanvas && isPathSelected && activePathRecord ? '' : 'w-72'
+        }`}>
           {showSimCanvas ? (
             <div className="flex-1 flex items-center justify-center p-6">
               <p className="text-xs text-muted-foreground/60 text-center">
@@ -1642,6 +1653,7 @@ export default function AutoWorkspace() {
               onSelect={setSelectedWaypointIndex}
               onUpdate={onUpdatePathWaypoint}
               onDelete={onDeletePathWaypoint}
+              onInsertAfter={onInsertPathWaypointAfter}
               startLinked={startLinked}
               constraints={activePathRecord.constraints?.maxVel ? activePathRecord.constraints : defaultConstraints}
               setConstraints={(updater) => {

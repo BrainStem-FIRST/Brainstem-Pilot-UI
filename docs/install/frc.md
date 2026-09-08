@@ -45,4 +45,4 @@ Store autos under `src/main/deploy/brainstemPilotAuto/` so they deploy to the ro
 
 ## API
 
-Generated class docs: [FRC Javadoc](/javadoc/frc/).
+Generated class docs: [FRC Javadoc](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/frc/index.html).

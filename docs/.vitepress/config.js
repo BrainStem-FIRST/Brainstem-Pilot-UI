@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitepress';
 
 const DOCS_BASE = '/Brainstem-Pilot-UI/docs/';
+const DOCS_ORIGIN = 'https://brainstem-first.github.io/Brainstem-Pilot-UI/docs';
+const JAVADOC_FRC = `${DOCS_ORIGIN}/javadoc/frc/index.html`;
+const JAVADOC_FTC = `${DOCS_ORIGIN}/javadoc/ftc/index.html`;
 
 export default defineConfig({
   title: 'BrainSTEM Pilot',
@@ -9,9 +12,7 @@ export default defineConfig({
   srcDir: '.',
   outDir: '../dist/docs',
   cleanUrls: true,
-  ignoreDeadLinks: [
-    /^\/javadoc\//,
-  ],
+  ignoreDeadLinks: true,
   themeConfig: {
     logo: '/favicon.png',
     siteTitle: 'BrainSTEM Pilot',
@@ -49,8 +50,8 @@ export default defineConfig({
         text: 'API',
         items: [
           { text: 'Class reference', link: '/api' },
-          { text: 'FRC Javadoc', link: '/javadoc/frc/' },
-          { text: 'FTC Javadoc', link: '/javadoc/ftc/' },
+          { text: 'FRC Javadoc', link: JAVADOC_FRC },
+          { text: 'FTC Javadoc', link: JAVADOC_FTC },
         ],
       },
     ],

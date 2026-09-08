@@ -17,7 +17,7 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "docs:shots": "node scripts/capture-docs.mjs",
-    "docs:dev": "node scripts/sync-docs-assets.mjs && vitepress dev docs",
+    "docs:dev": "node scripts/sync-docs-assets.mjs && vitepress dev docs --port 5174",
     "docs:build": "node scripts/sync-docs-assets.mjs && vitepress build docs && node scripts/copy-javadoc.mjs"
   },
   "dependencies": {

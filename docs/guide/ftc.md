@@ -8,4 +8,4 @@
 
 An OpMode class name strips punctuation, so *Nine Ball (123)* and *Nine Ball 123* would both become `NineBall123Auto`. Renaming into that collision is refused.
 
-Install the artifact from [Install the FTC library](/install/ftc). Class reference: [FTC Javadoc](/javadoc/ftc/).
+Install the artifact from [Install the FTC library](/install/ftc). Class reference: [FTC Javadoc](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/ftc/index.html).

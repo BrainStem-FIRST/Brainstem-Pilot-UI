@@ -35,5 +35,5 @@ Click **More info → Run anyway** on the SmartScreen prompt.
 
 ## Next
 
-1. Create the project folder in your robot repo — see [Getting started](/guide/getting-started).
+1. On the welcome screen, pick **FTC** or **FRC**, then **Open project**. See [Getting started](/guide/getting-started).
 2. Install the robot library for your league: [FRC](/install/frc) or [FTC](/install/ftc).

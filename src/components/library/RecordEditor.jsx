@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, MapPin, Route } from 'lucide-react';
+import { ChevronLeft, MapPin, PlusCircle, Route } from 'lucide-react';
 import FieldCanvas from '../autobuilder/FieldCanvas';
 import { getDefaultPathEditorView } from '../../lib/fieldCoordinates';
 import { generateTrajectory } from '../../lib/trajectoryMath';
 import { useFieldConfig } from '../../context/FieldConfigContext';
 import { useLeague } from '../../context/LeagueContext';
-import { getMotionUnitsForLeague } from '../../lib/motionUnits';
+import { insertWaypointAfter } from '../../lib/pathWaypoints';
 import { readEntity } from '../../lib/dataService';
 
 const POSE_KEYS = ['x', 'y', 'rotation'];
@@ -110,6 +110,13 @@ export default function RecordEditor({ kind, record, onChange, onBeginEdit, onEn
     onChange({ waypoints: waypoints.filter((_, i) => i !== index) });
   }, [isPoint, waypoints, onChange]);
 
+  const insertAfter = useCallback((index) => {
+    if (isPoint) return;
+    const next = insertWaypointAfter(waypoints, index);
+    onChange({ waypoints: next });
+    setSelectedIndex(index + 1);
+  }, [isPoint, waypoints, onChange]);
+
   const activeIndex = isPoint ? 0 : selectedIndex;
   const activeWaypoint = activeIndex != null ? waypoints[activeIndex] : null;
   const showRotation = isPoint || activeIndex === 0 || activeIndex === waypoints.length - 1;
@@ -162,6 +169,17 @@ export default function RecordEditor({ kind, record, onChange, onBeginEdit, onEn
               {showRotation && (
                 <CoordField label="Rotation" unit="°" value={activeWaypoint.rotation ?? 0}
                   onChange={v => editPose({ rotation: v })} />
+              )}
+              {!isPoint && activeIndex != null && (
+                <button
+                  type="button"
+                  title="Insert waypoint after this one"
+                  onClick={() => insertAfter(activeIndex)}
+                  className="flex items-center gap-1 h-[30px] px-2 rounded-md bg-primary/10 border border-primary/30 text-primary text-[11px] font-semibold hover:bg-primary/20"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  After
+                </button>
               )}
             </div>
           ) : (

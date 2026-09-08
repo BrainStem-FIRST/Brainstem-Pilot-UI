@@ -337,7 +337,7 @@ export default function WaypointSidebar({
   const { bounds, unit } = useFieldConfig();
   const { projectType } = useLeague();
   const motionUnits = getMotionUnitsForLeague(projectType);
-  const [sidebarWidth, setSidebarWidth] = React.useState(256);
+  const [sidebarWidth, setSidebarWidth] = React.useState(288);
   const resizing = React.useRef(false);
 
   const onMouseDown = (e) => {
@@ -356,7 +356,7 @@ export default function WaypointSidebar({
   };
 
   return (
-    <div className="bg-card border-l border-border flex flex-col overflow-hidden shrink-0 relative" style={{ width: sidebarWidth }}>
+    <div className="bg-card flex flex-col overflow-hidden shrink-0 relative h-full min-h-0" style={{ width: sidebarWidth }}>
       <div onMouseDown={onMouseDown} className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/40 transition-colors z-10" />
 
       {/* Path info */}
@@ -402,7 +402,7 @@ export default function WaypointSidebar({
               )}
               <NumberInput label="X Position" value={selected.x} onChange={(v) => onUpdate(selectedIndex, { x: v })} min={bounds.xMin} max={bounds.xMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
               <NumberInput label="Y Position" value={selected.y} onChange={(v) => onUpdate(selectedIndex, { y: v })} min={bounds.yMin} max={bounds.yMax} unit={unit} decimals={unit === 'in' ? 2 : 3} onEditStart={onEditStart} onEditEnd={onEditEnd} />
-              {onInsertAfter && selectedIndex < waypoints.length - 1 &&
+              {onInsertAfter && selectedIndex != null &&
                 <button onClick={() => onInsertAfter(selectedIndex)}
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 text-primary rounded-md text-xs font-medium hover:bg-primary/20 transition-all">
                   <PlusCircle className="w-3.5 h-3.5" /> Insert Waypoint After
