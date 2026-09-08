@@ -50,13 +50,13 @@ dependencies {
 }
 
 afterEvaluate {
-    def release = android.libraryVariants.find { it.name == 'release' }
+    def releaseVariant = android.libraryVariants.find { it.name == 'release' }
     tasks.register('javadoc', Javadoc) {
         group = 'documentation'
         description = 'Generate FTC library Javadoc.'
-        dependsOn release.javaCompileProvider
+        dependsOn releaseVariant.javaCompileProvider
         source = android.sourceSets.main.java.srcDirs
-        classpath += files(release.javaCompileProvider.get().classpath)
+        classpath += files(releaseVariant.javaCompileProvider.get().classpath)
         classpath += files(android.bootClasspath)
         destinationDir = layout.buildDirectory.dir('docs/javadoc').get().asFile
         failOnError = false
