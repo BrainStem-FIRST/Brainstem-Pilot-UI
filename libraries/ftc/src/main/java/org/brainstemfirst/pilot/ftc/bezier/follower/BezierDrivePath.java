@@ -61,13 +61,22 @@ public class BezierDrivePath implements Action {
         public String pathName = "";
         public Vector2d robotPosition = new Vector2d(0, 0);
         public Vector2d closestPoint = new Vector2d(0, 0);
+        /** Current waypoint end — the point being finished — not the lookahead sample. */
         public Vector2d targetPoint = new Vector2d(0, 0);
         public Vector2d pathEnd = new Vector2d(0, 0);
+        public double robotHeadingRad;
         public double targetHeadingRad;
         public double closestT;
         public double remainingLength;
+        public double distToTarget;
+        /** True while the current waypoint is in its finish condition. */
         public boolean finished;
+        public boolean pathFinished;
+        public boolean inPositionTolerance;
+        public boolean inHeadingTolerance;
         public boolean timedOut;
+        public int waypointIndex;
+        public int waypointCount;
     }
 
     public BezierDrivePath(
@@ -122,13 +131,17 @@ public class BezierDrivePath implements Action {
         isRed = alliance == FieldConstants.Alliance.RED;
         STATUS.pathName = name;
         STATUS.finished = false;
+        STATUS.pathFinished = false;
         STATUS.timedOut = false;
+        STATUS.waypointIndex = 0;
+        STATUS.waypointCount = paths.length;
     }
 
     private void execute() {
         if (finished || currentPathIndex >= paths.length) {
             finished = true;
             STATUS.finished = true;
+            STATUS.pathFinished = true;
             return;
         }
 
@@ -174,24 +187,42 @@ public class BezierDrivePath implements Action {
 
         boolean inPositionTolerance = basePath.params.tolerance.inPositionTolerance(robotToEndPoint);
         boolean inHeadingTolerance = basePath.params.tolerance.inHeadingTolerance(headingErrorRad);
+        boolean passedEnd = hasPassedEnd(activeCurve, robotToEndPoint);
+        boolean flyingThrough = basePath.params.minLinearSpeed > 1e-6;
 
-        boolean passPosition = false;
-        if (basePath.params.passPosition) {
-            Vector2d endTangent = activeCurve.getDerivative(1);
-            double dot = endTangent.x * robotToEndPoint.x + endTangent.y * robotToEndPoint.y;
-            passPosition = dot < 0;
-        }
-
-        publishStatus(robotPos, closestPoint, lookaheadPoint, endPoint, targetHeadingRad, closestT, 0, false);
-
+        boolean passPosition = basePath.params.passPosition && passedEnd;
         boolean timedOut = basePath.params.hasMaxTime() && segmentTimer.seconds() > basePath.params.maxTime;
-        if ((inPositionTolerance && inHeadingTolerance) || passPosition || timedOut) {
+
+        // Min speed means this waypoint is a fly-through: finish on the position band (or once
+        // past the end) without waiting to settle heading. Waiting for heading at 50 in/s is
+        // what overshoots, reverses, then continues.
+        boolean waypointReached = timedOut
+                || passPosition
+                || (flyingThrough && (inPositionTolerance || passedEnd))
+                || (inPositionTolerance && inHeadingTolerance);
+
+        publishStatus(
+                robotPos,
+                robotHeadingRad,
+                closestPoint,
+                endPoint,
+                endPoint,
+                targetHeadingRad,
+                closestT,
+                robotToEndPoint.norm(),
+                waypointReached,
+                timedOut,
+                inPositionTolerance,
+                inHeadingTolerance);
+
+        if (waypointReached) {
             currentPathIndex++;
             STATUS.timedOut = timedOut;
+            STATUS.finished = true;
 
             if (currentPathIndex >= paths.length) {
                 finished = true;
-                STATUS.finished = true;
+                STATUS.pathFinished = true;
                 setDrivePowers.accept(new PoseVelocity2d(new Vector2d(0, 0), 0));
             }
             return;
@@ -213,7 +244,19 @@ public class BezierDrivePath implements Action {
                     activeCurve, closestT, robotToEndPoint);
         }
 
-        publishStatus(robotPos, closestPoint, lookaheadPoint, endPoint, targetHeadingRad, closestT, totalRemainingLength, false);
+        publishStatus(
+                robotPos,
+                robotHeadingRad,
+                closestPoint,
+                endPoint,
+                endPoint,
+                targetHeadingRad,
+                closestT,
+                totalRemainingLength,
+                false,
+                false,
+                inPositionTolerance,
+                inHeadingTolerance);
 
         Vector2d driveVector;
         Vector2d linearVector;
@@ -251,7 +294,13 @@ public class BezierDrivePath implements Action {
         }
 
         double rotationPower = PathFollowerUtils.getRotationPower(
-                robotHeadingRad, targetHeadingRad, BezierFollowerConfig.headingkP, BezierFollowerConfig.headingkF);
+                robotHeadingRad,
+                targetHeadingRad,
+                BezierFollowerConfig.headingkP,
+                BezierFollowerConfig.headingkF,
+                BezierFollowerConfig.headingkD,
+                lastVelRobot.get().angVel,
+                Math.toRadians(BezierFollowerConfig.headingFfDeadbandDeg));
 
         double linearMagnitude = linearVector.norm();
 
@@ -276,23 +325,44 @@ public class BezierDrivePath implements Action {
 
     private void publishStatus(
             Vector2d robotPos,
+            double robotHeadingRad,
             Vector2d closestPoint,
             Vector2d targetPoint,
             Vector2d pathEnd,
             double targetHeadingRad,
             double closestT,
             double remainingLength,
-            boolean timedOut) {
+            boolean waypointFinished,
+            boolean timedOut,
+            boolean inPositionTolerance,
+            boolean inHeadingTolerance) {
         STATUS.pathName = name;
         STATUS.robotPosition = robotPos;
+        STATUS.robotHeadingRad = robotHeadingRad;
         STATUS.closestPoint = closestPoint;
         STATUS.targetPoint = targetPoint;
         STATUS.pathEnd = pathEnd;
         STATUS.targetHeadingRad = targetHeadingRad;
         STATUS.closestT = closestT;
         STATUS.remainingLength = remainingLength;
-        STATUS.finished = finished;
+        STATUS.distToTarget = PathFollowerUtils.vecDist(robotPos, targetPoint);
+        STATUS.finished = waypointFinished;
+        STATUS.pathFinished = finished;
+        STATUS.inPositionTolerance = inPositionTolerance;
+        STATUS.inHeadingTolerance = inHeadingTolerance;
         STATUS.timedOut = timedOut;
+        STATUS.waypointIndex = Math.min(currentPathIndex + 1, paths.length);
+        STATUS.waypointCount = paths.length;
+    }
+
+    /** True when the robot has crossed the plane at the waypoint, along the path's end tangent. */
+    private static boolean hasPassedEnd(BezierCurve curve, Vector2d robotToEndPoint) {
+        Vector2d endTangent = curve.getDerivative(1);
+        double norm = endTangent.norm();
+        if (norm < 1e-6) {
+            return false;
+        }
+        return (endTangent.x * robotToEndPoint.x + endTangent.y * robotToEndPoint.y) < 0;
     }
 
     private static double cruiseVel(BezierPath path) {
@@ -323,14 +393,12 @@ public class BezierDrivePath implements Action {
         return true;
     }
 
+    /**
+     * Alliance-transforms the authored curve. The start point stays on the JSON geometry so the
+     * spline does not warp when the robot is a few inches off the first waypoint.
+     */
     private BezierCurve createSegmentCurve(BezierCurve baseCurve, Vector2d robotPos) {
-        BezierCurve fieldCurve = applyAllianceTransform(baseCurve);
-        return new BezierCurve(
-                robotPos,
-                fieldCurve.getControl1(),
-                fieldCurve.getControl2(),
-                fieldCurve.getEnd()
-        );
+        return applyAllianceTransform(baseCurve);
     }
 
     private List<RotationPoint> createSegmentRotationPoints(ArrayList<RotationPoint> rotationPoints) {
@@ -357,10 +425,10 @@ public class BezierDrivePath implements Action {
             return curve;
         }
         return new BezierCurve(
-                FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getStart())),
-                FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getControl1())),
-                FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getControl2())),
-                FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(curve.getEnd()))
+                FieldConstants.mirrorAlliance(curve.getStart()),
+                FieldConstants.mirrorAlliance(curve.getControl1()),
+                FieldConstants.mirrorAlliance(curve.getControl2()),
+                FieldConstants.mirrorAlliance(curve.getEnd())
         );
     }
 }

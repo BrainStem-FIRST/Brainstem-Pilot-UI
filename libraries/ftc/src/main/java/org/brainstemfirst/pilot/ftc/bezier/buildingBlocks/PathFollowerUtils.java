@@ -255,10 +255,28 @@ public final class PathFollowerUtils {
     }
 
     public static double getRotationPower(double currentHeadingRad, double targetHeadingRad, double kP, double kF) {
+        return getRotationPower(currentHeadingRad, targetHeadingRad, kP, kF, 0.0, 0.0, 0.0);
+    }
+
+    /**
+     * Heading command in [-1, 1] (later scaled by max angular speed).
+     *
+     * {@code kF} is a static kick to break friction. It is applied only when the heading error is
+     * larger than {@code ffDeadbandRad}; using it on every non-zero error chatters around the
+     * setpoint. {@code kD} damps measured angular velocity.
+     */
+    public static double getRotationPower(
+            double currentHeadingRad,
+            double targetHeadingRad,
+            double kP,
+            double kF,
+            double kD,
+            double angVelRadPerSec,
+            double ffDeadbandRad) {
         double errorRadians = angleNormDeltaRad(targetHeadingRad - currentHeadingRad);
-        double power = errorRadians * kP;
-        if (Math.abs(power) > 1e-6) {
-            return power + (Math.signum(power) * kF);
+        double power = errorRadians * kP - kD * angVelRadPerSec;
+        if (kF != 0.0 && Math.abs(errorRadians) > Math.max(ffDeadbandRad, 1e-6)) {
+            power += Math.signum(errorRadians) * kF;
         }
         return power;
     }
@@ -292,7 +310,7 @@ public final class PathFollowerUtils {
     }
 
     public static double flipHeadingForRed(double headingRad) {
-        return angleNormRad(headingRad + Math.PI);
+        return angleNormRad(Math.PI - headingRad);
     }
 
     public static Vector2d rotate(Vector2d vector, double angleRad) {

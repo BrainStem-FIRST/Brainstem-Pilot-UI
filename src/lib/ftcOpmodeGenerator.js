@@ -117,8 +117,10 @@ public abstract class PilotAutoBase extends PilotOpMode {
         BezierFollowerConfig.correctivePower = 0.7;
 
         // Heading error gains.
-        BezierFollowerConfig.headingkP = 0.05;
-        BezierFollowerConfig.headingkF = 0.05;
+        BezierFollowerConfig.headingkP = 0.35;
+        BezierFollowerConfig.headingkD = 0.02;
+        BezierFollowerConfig.headingkF = 0.0;
+        BezierFollowerConfig.headingFfDeadbandDeg = 8.0;
 
         // Speed error gains (ONLY used if useVelocityProfile is false)
         BezierFollowerConfig.speedkP = 0.05;

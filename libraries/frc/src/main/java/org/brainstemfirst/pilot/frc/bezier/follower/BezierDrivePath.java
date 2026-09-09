@@ -136,16 +136,20 @@ public class BezierDrivePath extends Command {
 
         boolean inPositionTolerance = basePath.params.tolerance.inPositionTolerance(robotToEndPoint);
         boolean inHeadingTolerance = basePath.params.tolerance.inHeadingTolerance(headingError);
-
-        boolean passPosition = false;
-        if (basePath.params.passPosition) {
-            Translation2d endTangent = activeCurve.getDerivative(1);
-            double dot = endTangent.dot(robotToEndPoint);
-            passPosition = dot < 0;
+        boolean passedEnd = false;
+        Translation2d endTangent = activeCurve.getDerivative(1);
+        double endDot = endTangent.getX() * robotToEndPoint.getX() + endTangent.getY() * robotToEndPoint.getY();
+        if (endTangent.getNorm() > 1e-6) {
+            passedEnd = endDot < 0;
         }
+        boolean flyingThrough = basePath.params.minLinearSpeed > 1e-6;
 
+        boolean passPosition = basePath.params.passPosition && passedEnd;
         boolean timedOut = basePath.params.hasMaxTime() && segmentTimer.get() > basePath.params.maxTime;
-        if ((inPositionTolerance && inHeadingTolerance) || passPosition || timedOut) {
+        if (timedOut
+                || passPosition
+                || (flyingThrough && (inPositionTolerance || passedEnd))
+                || (inPositionTolerance && inHeadingTolerance)) {
             currentPathIndex++;
 
             if (currentPathIndex >= paths.length) {
@@ -276,18 +280,11 @@ public class BezierDrivePath extends Command {
     }
 
     /**
-     * Rebuilds a segment curve on entry so P0 is the robot's current position while the authored
-     * control points and endpoint are preserved. This lets chained paths continue from wherever
-     * the robot actually is instead of driving back to the JSON's first waypoint.
+     * Alliance-transforms the authored curve. The start point stays on the JSON geometry so the
+     * spline does not warp when the robot is a few inches off the first waypoint.
      */
     private BezierCurve createSegmentCurve(BezierCurve baseCurve, Translation2d robotPos) {
-        BezierCurve fieldCurve = applyAllianceTransform(baseCurve);
-        return new BezierCurve(
-            robotPos,
-            fieldCurve.getControl1(),
-            fieldCurve.getControl2(),
-            fieldCurve.getEnd()
-        );
+        return applyAllianceTransform(baseCurve);
     }
 
     /** Drops authored t=0 headings; segment entry uses the robot's actual heading instead. */

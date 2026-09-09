@@ -92,14 +92,20 @@ public abstract class PilotOpMode extends LinearOpMode {
         defaultParams = createDefaultBezierParams();
         BrainstemPilot.initialize(hardwareMap.appContext, defaultParams);
         alliance = defaultAlliance;
-        applyAllianceConfiguration();
+        startPose = BrainstemPilot.getStartingPose(autoId, alliance)
+                .orElse(new Pose2d(0, 0, 0));
 
         while (!isStarted() && !isStopRequested()) {
             FieldConstants.Alliance previousAlliance = alliance;
-
-            if (gamepad1.xWasPressed()) alliance = FieldConstants.Alliance.BLUE;
-            if (gamepad1.bWasPressed()) alliance = FieldConstants.Alliance.RED;
-            if (alliance != previousAlliance) applyAllianceConfiguration();
+            if (gamepad1.x) {
+                alliance = FieldConstants.Alliance.BLUE;
+            } else if (gamepad1.b) {
+                alliance = FieldConstants.Alliance.RED;
+            }
+            if (alliance != previousAlliance) {
+                startPose = BrainstemPilot.getStartingPose(autoId, alliance)
+                        .orElse(new Pose2d(0, 0, 0));
+            }
 
             telemetry.addData("Auto", autoId);
             telemetry.addData("Alliance", alliance);
@@ -107,10 +113,12 @@ public abstract class PilotOpMode extends LinearOpMode {
             telemetry.addLine("X = Blue | B = Red");
             telemetry.addLine("Ready — waiting for START");
             telemetry.update();
+            idle();
         }
 
         waitForStart();
 
+        applyAllianceConfiguration();
         onOpModeStart();
         Actions.runBlocking(new ParallelAction(pilotAuto, this::runUpdateLoop));
     }

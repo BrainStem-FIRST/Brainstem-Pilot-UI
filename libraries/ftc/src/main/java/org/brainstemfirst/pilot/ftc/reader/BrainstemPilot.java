@@ -160,7 +160,7 @@ public class BrainstemPilot {
             }
 
             Pose2d pose = alliance == FieldConstants.Alliance.RED
-                    ? FieldConstants.mirrorAlliance(FieldConstants.mirrorSide(bluePose))
+                    ? FieldConstants.mirrorAlliance(bluePose)
                     : bluePose;
             m_startingPoseCache.put(cacheKey, pose);
             return Optional.of(pose);

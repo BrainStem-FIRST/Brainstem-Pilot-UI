@@ -18,12 +18,15 @@ public final class FieldConstants {
         return new Pose2d(-pose.position.x, pose.position.y, -pose.heading.toDouble());
     }
 
-    /** Mirror for the red alliance (180° about field origin). */
+    /** Reflect blue-authored coordinates onto red by flipping field X. Y is unchanged. */
     public static Vector2d mirrorAlliance(Vector2d point) {
-        return new Vector2d(-point.x, -point.y);
+        return new Vector2d(-point.x, point.y);
     }
 
     public static Pose2d mirrorAlliance(Pose2d pose) {
-        return new Pose2d(-pose.position.x, -pose.position.y, pose.heading.toDouble() + Math.PI);
+        return new Pose2d(
+                -pose.position.x,
+                pose.position.y,
+                Math.PI - pose.heading.toDouble());
     }
 }
