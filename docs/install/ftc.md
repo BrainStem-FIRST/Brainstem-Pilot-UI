@@ -1,6 +1,6 @@
 # Install the FTC library
 
-Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.0`
+Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.1`
 
 This module is the robot-side Bézier follower and auto JSON reader. The visual editor stays in the app; this library runs on the Control Hub.
 
@@ -17,7 +17,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.brainstemfirst:pilot-ftc:2026.1.0'
+    implementation 'org.brainstemfirst:pilot-ftc:2026.1.1'
 }
 ```
 

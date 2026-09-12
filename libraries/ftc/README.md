@@ -1,6 +1,6 @@
 # Brainstem Pilot FTC library
 
-Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.0`
+Gradle coordinate: `org.brainstemfirst:pilot-ftc:2026.1.1`
 
 Team docs: [Install FTC](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/install/ftc) · [Java API](https://brainstem-first.github.io/Brainstem-Pilot-UI/docs/javadoc/ftc/index.html)
 
@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.brainstemfirst:pilot-ftc:2026.1.0'
+    implementation 'org.brainstemfirst:pilot-ftc:2026.1.1'
 }
 ```
 
@@ -57,4 +57,4 @@ Follower gains are set in `PilotAutoBase.configureFollower()` on `BezierFollower
 ./gradlew publishToMavenLocal
 ```
 
-That is optional. Teams resolve `org.brainstemfirst:pilot-ftc:2026.1.0` from GitHub Pages, not from `mavenLocal()`.
+That is optional. Teams resolve `org.brainstemfirst:pilot-ftc:2026.1.1` from GitHub Pages, not from `mavenLocal()`.
