@@ -1,7 +1,7 @@
 // Project folder management using File System Access API
 // Stores a directory handle in memory (persists for the browser session)
 
-import { getDefaultFieldId } from './fieldConfig.js';
+import { getDefaultFieldId, resolveField } from './fieldConfig.js';
 
 const DEFAULT_FRC_ROBOT = {
   width: 0.76,
@@ -512,6 +512,7 @@ export async function initializeProjectFolder(projectType = 'frc') {
     await saveAppSettingsToProject({
       projectType: league,
       selectedFieldId: getDefaultFieldId(league),
+      allianceMirror: resolveField(getDefaultFieldId(league), league)?.allianceMirror ?? 'flipX',
     });
   }
   await migrateLegacyAutosIfNeeded();

@@ -61,12 +61,36 @@
       "imageWidth": 4096,
       "imageHeight": 4096,
       "originMode": "center",
+      "allianceMirror": "flipX",
       "centerPixel": { "x": 2048, "y": 2048 },
       "extentPixels": {
         "xMin": { "x": 0, "y": 2048 },
         "xMax": { "x": 4096, "y": 2048 },
         "yMin": { "x": 2048, "y": 4096 },
         "yMax": { "x": 2048, "y": 0 }
+      }
+    },
+    {
+      "id": "biobuzz_2027",
+      "name": "BioBuzz (2027)",
+      "season": "2027",
+      "league": "ftc",
+      "unit": "in",
+      "imageFile": "ftc/biobuzz_2027.png",
+      "width": 144,
+      "height": 144,
+      "halfExtentX": 72,
+      "halfExtentY": 72,
+      "imageWidth": 1080,
+      "imageHeight": 1080,
+      "originMode": "center",
+      "allianceMirror": "origin",
+      "centerPixel": { "x": 540, "y": 540 },
+      "extentPixels": {
+        "xMin": { "x": 0, "y": 540 },
+        "xMax": { "x": 1080, "y": 540 },
+        "yMin": { "x": 540, "y": 1080 },
+        "yMax": { "x": 540, "y": 0 }
       }
     }
   ]

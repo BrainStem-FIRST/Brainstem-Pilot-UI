@@ -17,7 +17,7 @@ import {
   deleteAutoFromProject,
   safeNameFromString,
 } from './projectFolder';
-import { getDefaultFieldId } from './fieldConfig';
+import { getDefaultFieldId, resolveField } from './fieldConfig';
 import { normalizeSavedPaths } from './pathWaypoints';
 
 const APP_SETTINGS_STORAGE_KEY = 'brainstem_app_settings';
@@ -86,9 +86,11 @@ function getStoredLeaguePreference() {
 
 function defaultAppSettings() {
   const league = getStoredLeaguePreference();
+  const selectedFieldId = getDefaultFieldId(league);
   return {
     projectType: league,
-    selectedFieldId: getDefaultFieldId(league),
+    selectedFieldId,
+    allianceMirror: resolveField(selectedFieldId, league)?.allianceMirror ?? 'flipX',
   };
 }
 

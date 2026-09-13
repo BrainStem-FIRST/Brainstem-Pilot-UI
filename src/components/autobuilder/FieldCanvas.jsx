@@ -7,6 +7,7 @@ import { getPoseAtProgress } from '../../lib/trajectoryMath';
 import { useFieldConfig } from '../../context/FieldConfigContext';
 import { useLeague } from '../../context/LeagueContext';
 import { lockControlHandles180 } from '../../lib/pathWaypoints';
+import { getMotionUnitsForLeague } from '../../lib/motionUnits';
 
 function drawStar(ctx, cx, cy, r, color) {
   const spikes = 5;

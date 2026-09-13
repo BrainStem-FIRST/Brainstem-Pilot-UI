@@ -2,6 +2,8 @@ package org.brainstemfirst.pilot.ftc.bezier.buildingBlocks;
 
 import com.acmerobotics.roadrunner.Vector2d;
 
+import org.brainstemfirst.pilot.ftc.model.FieldConstants;
+
 import java.util.List;
 
 /**
@@ -310,7 +312,7 @@ public final class PathFollowerUtils {
     }
 
     public static double flipHeadingForRed(double headingRad) {
-        return angleNormRad(Math.PI - headingRad);
+        return FieldConstants.mirrorAllianceHeading(headingRad);
     }
 
     public static Vector2d rotate(Vector2d vector, double angleRad) {

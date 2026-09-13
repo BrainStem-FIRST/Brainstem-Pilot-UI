@@ -5,6 +5,7 @@ import { getDefaultPathEditorView } from '../../lib/fieldCoordinates';
 import { generateTrajectory } from '../../lib/trajectoryMath';
 import { useFieldConfig } from '../../context/FieldConfigContext';
 import { useLeague } from '../../context/LeagueContext';
+import { getMotionUnitsForLeague } from '../../lib/motionUnits';
 import { insertWaypointAfter } from '../../lib/pathWaypoints';
 import { readEntity } from '../../lib/dataService';
 

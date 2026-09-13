@@ -7,7 +7,7 @@ import {
 import FieldCanvas from '../components/autobuilder/FieldCanvas';
 import SimCanvas from '../components/autobuilder/SimCanvas';
 import WaypointSidebar, { OptionalParamsSection } from '../components/autobuilder/WaypointSidebar';
-import { generateTrajectory, buildAutoChain, attachChainTrajectories, mirrorTrajectoryFieldSide, mirrorTrajectoryAcrossYAxis } from '../lib/trajectoryMath';
+import { generateTrajectory, buildAutoChain, attachChainTrajectories, mirrorTrajectoryFieldSide, mirrorTrajectoryForAlliance } from '../lib/trajectoryMath';
 import { resolveVisibleVisuals, chainToSegments, wrapAngle } from '../lib/simSegments';
 import { useFieldConfig } from '../context/FieldConfigContext';
 import { useLeague } from '../context/LeagueContext';
@@ -761,10 +761,10 @@ export default function AutoWorkspace() {
         };
       }
     } else if (alliance === 'red') {
-      traj = mirrorTrajectoryAcrossYAxis(traj);
+      traj = mirrorTrajectoryForAlliance(traj, activeField);
     }
     return { ...seg, trajectory: traj };
-  }), [segments, isFrc, fieldSide, alliance, bounds]);
+  }), [segments, isFrc, fieldSide, alliance, bounds, activeField]);
 
   let simElapsed = 0, activeSegIdx = -1;
   for (let i = 0; i < segments.length; i++) {

@@ -83,3 +83,8 @@ export function getDefaultFieldId(league) {
   if (league === 'ftc') return fieldsCatalog.defaultFtcFieldId ?? 'decode_2026';
   return fieldsCatalog.defaultFieldId;
 }
+
+/** How red alliance maps from blue-authored coordinates. `flipX` (default) or `origin`. */
+export function getAllianceMirror(field = activeField) {
+  return field?.allianceMirror ?? 'flipX';
+}

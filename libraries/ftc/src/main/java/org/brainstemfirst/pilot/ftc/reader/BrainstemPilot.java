@@ -14,6 +14,7 @@ import com.acmerobotics.roadrunner.Pose2d;
 import com.acmerobotics.roadrunner.PoseVelocity2d;
 import com.acmerobotics.roadrunner.SequentialAction;
 import com.acmerobotics.roadrunner.SleepAction;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.brainstemfirst.pilot.ftc.PilotRegistry;
@@ -75,6 +76,7 @@ public class BrainstemPilot {
         m_maxAngVel = null;
         m_alliance = null;
         m_defaultParams = defaultParams;
+        loadAllianceMirrorFromAssets();
     }
 
     public static void initialize(
@@ -92,6 +94,22 @@ public class BrainstemPilot {
         m_maxAngVel = maxAngVel;
         m_alliance = alliance;
         m_defaultParams = defaultParams;
+        loadAllianceMirrorFromAssets();
+    }
+
+    private static void loadAllianceMirrorFromAssets() {
+        try {
+            JsonNode root = m_objectMapper.readTree(readText("app_settings.json"));
+            String allianceMirror = root.hasNonNull("allianceMirror")
+                    ? root.get("allianceMirror").asText()
+                    : null;
+            String fieldId = root.hasNonNull("selectedFieldId")
+                    ? root.get("selectedFieldId").asText()
+                    : null;
+            FieldConstants.setAllianceMirror(FieldConstants.parseAllianceMirror(allianceMirror, fieldId));
+        } catch (Exception e) {
+            FieldConstants.setAllianceMirror(FieldConstants.AllianceMirror.FLIP_X);
+        }
     }
 
     public static PilotAutoBuilder buildAuto(String autoId) {

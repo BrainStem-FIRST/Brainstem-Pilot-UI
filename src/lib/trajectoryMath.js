@@ -1,4 +1,4 @@
-import { getFieldDimensions } from './fieldConfig';
+import { getFieldDimensions, getActiveField, getAllianceMirror } from './fieldConfig';
 
 // Physical dimensions of a standard FRC field in meters (defaults; active field may override via fieldConfig)
 export const FIELD_WIDTH_M = 16.541;
@@ -118,7 +118,7 @@ export function generateTrajectory(waypoints, constraints, rotationTargets = [],
     processedWaypoints = processedWaypoints.map(wp => mirrorWaypointForRed(wp));
     processedRotations = processedRotations.map(rot => ({
       ...rot,
-      rotation: normAngle(180 - (rot.rotation ?? 0))
+      rotation: mirrorAllianceRotation(rot.rotation ?? 0)
     }));
 
     // Re-generate segments with mirrored coordinates for exact mapping profiles
@@ -560,25 +560,20 @@ export function mirrorWaypointForFieldSide(wp) {
 
 export function mirrorWaypointForRed(wp) {
   if (!wp) return null;
-  const { widthM } = getFieldDimensions();
-  const mirroredX = widthM - wp.x;
-  const mirroredY = wp.y; 
-  const mirroredRotation = normAngle(180 - (wp.rotation ?? 0));
-
-  const mirroredPrev = wp.prevControl ? {
-    x: widthM - wp.prevControl.x,
-    y: wp.prevControl.y
-  } : null;
-
-  const mirroredNext = wp.nextControl ? {
-    x: widthM - wp.nextControl.x,
-    y: wp.nextControl.y
-  } : null;
+  const field = getActiveField();
+  const pos = mirrorAlliancePoint(wp.x, wp.y, field);
+  const mirroredRotation = mirrorAllianceRotation(wp.rotation ?? 0, field);
+  const mirroredPrev = wp.prevControl
+    ? mirrorAlliancePoint(wp.prevControl.x, wp.prevControl.y, field)
+    : null;
+  const mirroredNext = wp.nextControl
+    ? mirrorAlliancePoint(wp.nextControl.x, wp.nextControl.y, field)
+    : null;
 
   return {
     ...wp,
-    x: mirroredX,
-    y: mirroredY,
+    x: pos.x,
+    y: pos.y,
     rotation: mirroredRotation,
     prevControl: mirroredPrev,
     nextControl: mirroredNext
@@ -740,6 +735,40 @@ export function mirrorTrajectoryAcrossYAxis(traj) {
       rotation: s.rotation != null ? normAngle(180 - s.rotation) : undefined,
     })),
   };
+}
+
+/** Mirror trajectory 180° about the origin — BioBuzz red alliance. */
+export function mirrorTrajectoryAroundOrigin(traj) {
+  if (!traj?.states) return traj;
+  return {
+    ...traj,
+    states: traj.states.map(s => ({
+      ...s,
+      x: -s.x,
+      y: -s.y,
+      heading: normAngle((s.heading ?? 0) + 180),
+      pathHeading: normAngle((s.pathHeading ?? s.heading ?? 0) + 180),
+      rotation: s.rotation != null ? normAngle(s.rotation + 180) : undefined,
+    })),
+  };
+}
+
+export function mirrorAlliancePoint(x, y, field = getActiveField()) {
+  if (getAllianceMirror(field) === 'origin') return { x: -x, y: -y };
+  if (field?.originMode === 'center') return { x: -x, y };
+  const { widthM } = getFieldDimensions(field);
+  return { x: widthM - x, y };
+}
+
+export function mirrorAllianceRotation(rotationDeg, field = getActiveField()) {
+  if (getAllianceMirror(field) === 'origin') return normAngle((rotationDeg ?? 0) + 180);
+  return normAngle(180 - (rotationDeg ?? 0));
+}
+
+/** FTC red-alliance preview for the active field. */
+export function mirrorTrajectoryForAlliance(traj, field = getActiveField()) {
+  if (getAllianceMirror(field) === 'origin') return mirrorTrajectoryAroundOrigin(traj);
+  return mirrorTrajectoryAcrossYAxis(traj);
 }
 
 /** @deprecated use mirrorTrajectoryFieldSide */

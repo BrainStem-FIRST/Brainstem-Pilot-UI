@@ -68,7 +68,14 @@ export function FieldConfigProvider({ children }) {
     setSelectedFieldIdState(resolved.id);
     setActiveField(resolved.id, projectType);
     try {
-      await writeEntity('AppSettings', { selectedFieldId: resolved.id, projectType });
+      const existing = await readEntity('AppSettings');
+      const current = Array.isArray(existing) && existing.length > 0 ? existing[0] : (existing ?? {});
+      await writeEntity('AppSettings', {
+        ...current,
+        selectedFieldId: resolved.id,
+        projectType,
+        allianceMirror: resolved.allianceMirror ?? 'flipX',
+      });
     } catch (err) {
       console.error('Failed to save app settings:', err);
     }
